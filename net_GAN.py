@@ -114,6 +114,19 @@ class pose_gan(object):
         return self.prediction_layers(net, end_points)
 
 
+    def test(self, inputs):
+        heads = self.get_net(inputs)
+        return self.add_test_layers(heads)
+
+
+    def add_test_layers(self, heads):
+        prob = tf.sigmoid(heads['part_pred'])
+        outputs = {'part_prob': prob}
+        if self.cfg.location_refinement:
+            outputs['locref'] = heads['locref']
+        return outputs
+
+
     def train(self,batch):
         cfg = self.cfg
         intermediate = cfg.intermediate_supervision

@@ -29,7 +29,7 @@ tf.app.flags.DEFINE_float(
     'the global_scale wrt origial image'
 )
 tf.app.flags.DEFINE_bool(
-    'location_refinement', False,
+    'location_refinement', True,
     'use location_refinement or not'
 )
 tf.app.flags.DEFINE_float(
@@ -49,7 +49,7 @@ tf.app.flags.DEFINE_string(
     'which optimizer'
 )
 tf.app.flags.DEFINE_bool(
-    'intermediate_supervision', False,
+    'intermediate_supervision', True,
     'if use intermediate_supervision in Resnet'
 )
 tf.app.flags.DEFINE_integer(
@@ -77,7 +77,7 @@ tf.app.flags.DEFINE_integer(
     'crop_pad'
 )
 tf.app.flags.DEFINE_string(
-    'dataset', './liu_data/dataset.mat',
+    'dataset', '/home/hpc/ssd/lyj/liu_data/dataset.mat',
     'dataset name'
 )
 tf.app.flags.DEFINE_string(
@@ -105,7 +105,7 @@ tf.app.flags.DEFINE_string(
     'resnet_101 or resnet_50'
 )
 tf.app.flags.DEFINE_string(
-    'init_weights', './resnet_v1_101.ckpt',
+    'init_weights', '/home/hpc/ssd/lyj/pose-tensorflow/models/mpii/train/snapshot-1030000',
     'init_weights'
 )
 tf.app.flags.DEFINE_integer(
@@ -117,11 +117,11 @@ tf.app.flags.DEFINE_integer(
     'how frequency need to display'
 )
 tf.app.flags.DEFINE_integer(
-    'save_iters', 10,
+    'save_iters', 1000,
     'how frequency need to save model'
 )
 tf.app.flags.DEFINE_float(
-    'learning_rate', 0.002,
+    'learning_rate', 0.00002,
     'learning rate'
 )
 tf.app.flags.DEFINE_integer(

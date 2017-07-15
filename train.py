@@ -11,7 +11,7 @@ from factory import create as create_dataset
 import config
 from pose_dataset import Batch
 
-FLAGS = tf.app.flags.FLAGS
+cfg = tf.app.flags.FLAGS
 
 def setup_preloading(batch_spec):
     placeholders = {name: tf.placeholder(tf.float32, shape=spec) for (name, spec) in batch_spec.items()}
@@ -61,7 +61,6 @@ def get_optimizer(loss_op, cfg):
 
 def train():
 
-    cfg = FLAGS
     dataset = create_dataset(cfg)
 
     batch_spec = get_batch_spec(cfg)
@@ -129,6 +128,6 @@ def train():
 
 
 if __name__ == '__main__':
-    if not os.path.exists(FLAGS.save_path):
-        os.mkdir(FLAGS.save_path)
+    if not os.path.exists(cfg.save_path):
+        os.mkdir(cfg.save_path)
     train()
