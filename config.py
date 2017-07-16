@@ -132,6 +132,10 @@ tf.app.flags.DEFINE_bool(
     'weigh_only_present_joints', False,
     'if only weight the present joints'
 )
+tf.app.flags.DEFINE_float(
+    'width_structure', 1.5,
+    'width of the structure'
+)
 # cfg.weigh_negatives = False
 # cfg.fg_fraction = 0.25
 # cfg.scoremap_dir = "test"

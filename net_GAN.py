@@ -17,7 +17,8 @@ def get_batch_spec(cfg):
     batch_spec = {
         Batch.inputs: [batch_size, None, None, 3],
         Batch.part_score_targets: [batch_size, None, None, 1],
-        Batch.part_score_weights: [batch_size, None, None, 1]
+        Batch.part_score_weights: [batch_size, None, None, 1],
+        Batch.pose_target: [batch_size, None, None, 1]
     }
     if cfg.location_refinement:
         batch_spec[Batch.locref_targets] = [batch_size, None, None, num_joints * 2]
