@@ -255,7 +255,7 @@ class PoseDataset:
         dist_thresh = self.cfg.pos_dist_thresh * scale
         num_joints = self.cfg.num_joints
         half_stride = stride / 2
-        scmap = np.zeros(cat([size, arr([num_joints])]))
+        scmap = np.zeros(cat([size, arr([1])]))
 
         locref_shape = cat([size, arr([num_joints * 2])])
         locref_mask = np.zeros(locref_shape)
@@ -298,11 +298,11 @@ class PoseDataset:
                             current_normalized_dist = dist * locref_scale ** 2
                             prev_normalized_dist = locref_map[j, i, j_id * 2 + 0] ** 2 + \
                                                    locref_map[j, i, j_id * 2 + 1] ** 2
-                            update_scores = (scmap[j, i, j_id] == 0) or prev_normalized_dist > current_normalized_dist
+                            update_scores = (scmap[j, i, 0] == 0) or prev_normalized_dist > current_normalized_dist
                             if self.cfg.location_refinement and update_scores:
                                 self.set_locref(locref_map, locref_mask, locref_scale, i, j, j_id, dx, dy)
 
-                            scmap[j, i, j_id] = 1
+                            scmap[j, i, 0] = 1
 
         scmap_weights = self.compute_scmap_weights(scmap.shape, joint_id, data_item)
 

@@ -16,8 +16,8 @@ def get_batch_spec(cfg):
     batch_size = cfg.batch_size
     batch_spec = {
         Batch.inputs: [batch_size, None, None, 3],
-        Batch.part_score_targets: [batch_size, None, None, num_joints],
-        Batch.part_score_weights: [batch_size, None, None, num_joints]
+        Batch.part_score_targets: [batch_size, None, None, 1],
+        Batch.part_score_weights: [batch_size, None, None, 1]
     }
     if cfg.location_refinement:
         batch_spec[Batch.locref_targets] = [batch_size, None, None, num_joints * 2]
@@ -96,7 +96,7 @@ class pose_gan(object):
 
         with tf.variable_scope(scope, reuse=reuse):
             out['part_pred'] = prediction_layer(cfg, features, 'part_pred',
-                                                cfg.num_joints)
+                                                1)
             if cfg.location_refinement:
                 out['locref'] = prediction_layer(cfg, features, 'locref_pred',
                                                  cfg.num_joints * 2)
@@ -105,7 +105,7 @@ class pose_gan(object):
                 block_interm_out = end_points[interm_name]
                 out['part_pred_interm'] = prediction_layer(cfg, block_interm_out,
                                                            'intermediate_supervision',
-                                                           cfg.num_joints)
+                                                           1)
         return out
 
 

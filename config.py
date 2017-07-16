@@ -17,11 +17,11 @@ tf.app.flags.DEFINE_string(
     'the snapshot prefix'
 )
 tf.app.flags.DEFINE_string(
-    'save_path', './trained_model/',
+    'save_path', './trained_inter/',
     'where to save the trained_model'
 )
 tf.app.flags.DEFINE_string(
-    'log_dir', './log',
+    'log_dir', './log_inter',
     'save log dir'
 )
 tf.app.flags.DEFINE_float(
@@ -29,7 +29,7 @@ tf.app.flags.DEFINE_float(
     'the global_scale wrt origial image'
 )
 tf.app.flags.DEFINE_bool(
-    'location_refinement', True,
+    'location_refinement', False,
     'use location_refinement or not'
 )
 tf.app.flags.DEFINE_float(
@@ -105,7 +105,7 @@ tf.app.flags.DEFINE_string(
     'resnet_101 or resnet_50'
 )
 tf.app.flags.DEFINE_string(
-    'init_weights', '/home/hpc/ssd/lyj/pose-tensorflow/models/mpii/train/snapshot-1030000',
+    'init_weights', '/home/hpc/ssd/lyj/pose-tensorflow/models/pretrained/resnet_v1_101.ckpt',
     'init_weights'
 )
 tf.app.flags.DEFINE_integer(
@@ -117,15 +117,15 @@ tf.app.flags.DEFINE_integer(
     'how frequency need to display'
 )
 tf.app.flags.DEFINE_integer(
-    'save_iters', 1000,
+    'save_iters', 50000,
     'how frequency need to save model'
 )
 tf.app.flags.DEFINE_float(
-    'learning_rate', 0.00002,
+    'learning_rate', 0.00001,
     'learning rate'
 )
 tf.app.flags.DEFINE_integer(
-    'max_iter', 1000000,
+    'max_iter', 10000000,
     'max iteration'
 )
 tf.app.flags.DEFINE_bool(

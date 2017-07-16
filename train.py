@@ -74,8 +74,8 @@ def train():
 
     tf.summary.image('train_im',batch[Batch.inputs])
 
-    for i in range(cfg.num_joints):
-        tf.summary.image('pred_joint_%d'%i,tf.expand_dims(tf.sigmoid(heads['part_pred'])[:,:,:,i],-1))
+
+    tf.summary.image('pred_heat',tf.sigmoid(heads['part_pred']))
 
     merged_summaries = tf.summary.merge_all()
 
