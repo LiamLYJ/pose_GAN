@@ -17,11 +17,11 @@ tf.app.flags.DEFINE_string(
     'the snapshot prefix'
 )
 tf.app.flags.DEFINE_string(
-    'save_path', './trained_inter/',
+    'checkpoint_dir', './checkpoint_PGAN/',
     'where to save the trained_model'
 )
 tf.app.flags.DEFINE_string(
-    'log_dir', './log_inter',
+    'log_dir', './log_PGAN',
     'save log dir'
 )
 tf.app.flags.DEFINE_float(
@@ -121,8 +121,20 @@ tf.app.flags.DEFINE_integer(
     'how frequency need to save model'
 )
 tf.app.flags.DEFINE_float(
-    'learning_rate', 0.00001,
-    'learning rate'
+    'learning_rate_inter', 0.00001,
+    'learning rate for inter'
+)
+tf.app.flags.DEFINE_float(
+    'learning_rate_G', 0.0002,
+    'learning rate for Generator part'
+)
+tf.app.flags.DEFINE_float(
+    'learning_rate_D', 0.0002,
+    'learning rate for Discriminator part'
+)
+tf.app.flags.DEFINE_float(
+    'learning_rate_recon', 0.0002,
+    'learning rate for reconstruction loss'
 )
 tf.app.flags.DEFINE_integer(
     'max_iter', 10000000,

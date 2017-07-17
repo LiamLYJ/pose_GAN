@@ -1,3 +1,4 @@
+from __future__ import division
 import tensorflow as tf
 import numpy as np
 import threading
@@ -48,15 +49,55 @@ def start_preloading(sess, enqueue_op, dataset, placeholders):
     return coord, t
 
 
-def get_optimizer(loss_op, cfg):
+def get_optimizer(loss_op, cfg,whichone ='inter'):
 
-    if cfg.optimizer_name == "adam":
-        optimizer = tf.train.AdamOptimizer(cfg.learning_rate)
+    if (cfg.optimizer_name == "adam" and (whichone in ('G','D','inter','recon'))):
+        if whichone == 'inter':
+            optimizer = tf.train.AdamOptimizer(cfg.learning_rate_inter)
+        if whichone == 'G':
+            optimizer = tf.train.AdamOptimizer(cfg.learning_rate_G)
+        if whichone == 'D':
+            optimizer = tf.train.AdamOptimizer(cfg.learning_rate_D)
+        if whichone == 'recon':
+            optimizer = tf.train.AdamOptimizer(cfg.learning_rate_recon)
     else:
         raise ValueError('unknown optimizer {}'.format(cfg.optimizer))
     train_op = slim.learning.create_train_op(loss_op, optimizer)
 
     return  train_op
+
+
+def save_checkpoint(step,sess,saver,cfg):
+    model_name = "pGAN.model"
+    model_dir = cfg.dataset
+    checkpoint_dir = cfg.checkpoint_dir
+    checkpoint_dir = os.path.join(checkpoint_dir, model_dir)
+
+    if not os.path.exists(checkpoint_dir):
+        os.makedirs(checkpoint_dir)
+
+    saver.save(sess,os.path.join(checkpoint_dir, model_name),global_step=step)
+
+
+
+def load_checkpoint(sess,saver,cfg):
+    import re
+    print(" [*] Reading checkpoint...")
+    model_dir = cfg.dataset
+    checkpoint_dir = cfg.checkpoint_dirs
+    checkpoint_dir = os.path.join(checkpoint_dir, model_dir)
+
+    ckpt = tf.train.get_checkpoint_state(checkpoint_dir)
+    if ckpt and ckpt.model_checkpoint_path:
+        ckpt_name = os.path.basename(ckpt.model_checkpoint_path)
+        saver.restore(sess, os.path.join(checkpoint_dir, ckpt_name))
+        counter = int(next(re.finditer("(\d+)(?!.*\d)",ckpt_name)).group(0))
+        print(" [*] Success to read {}".format(ckpt_name))
+        return True, counter
+    else:
+        print(" [*] Failed to find a checkpoint")
+        return False, 0
+
 
 
 def train():
@@ -66,24 +107,25 @@ def train():
     batch_spec = get_batch_spec(cfg)
     batch, enqueue_op, placeholders = setup_preloading(batch_spec)
 
-    losses,heads = pose_gan(cfg).train(batch)
-    total_loss = losses['total_loss']
+    losses_inter,loss_G,loss_D,loss_recon,heads,d_real,d_fake = pose_gan(cfg).train(batch)
+    total_loss_inter = losses_inter['total_loss']
 
-    for k, t in losses.items():
+    tf.summary.histogram('d_real',d_real)
+    tf.summary.histogram('d_fake',d_fake)
+    for k, t in losses_inter.items():
         tf.summary.scalar(k, t)
 
-    tf.summary.image('train_im',batch[Batch.inputs])
+    tf.summary.scalar('loss_G',loss_G)
+    tf.summary.scalar('loss_D',loss_D)
+    tf.summary.scalar('loss_recon',loss_recon)
 
+    tf.summary.image('train_im',batch[Batch.inputs])
 
     tf.summary.image('pred_heat',tf.sigmoid(heads['part_pred']))
 
     merged_summaries = tf.summary.merge_all()
 
-    global_step = slim.create_global_step()
-
-    variables_to_restore = slim.get_variables_to_restore(include=["resnet_v1"])
-    restorer = tf.train.Saver(variables_to_restore)
-    saver = tf.train.Saver(max_to_keep=5)
+    saver = tf.train.Saver()
 
     sess = tf.Session()
 
@@ -91,36 +133,64 @@ def train():
 
     train_writer = tf.summary.FileWriter(cfg.log_dir, sess.graph)
 
-    train_op = get_optimizer(total_loss, cfg)
+    train_op_inter = get_optimizer(total_loss_inter, cfg)
+    train_op_G = get_optimizer(loss_G,cfg,'G')
+    extra_update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
+    with tf.control_dependencies(extra_update_ops):
+        train_op_D = get_optimizer(loss_D,cfg,'D')
+    train_op_recon = get_optimizer(loss_recon,'recon')
 
     sess.run(tf.global_variables_initializer())
     sess.run(tf.local_variables_initializer())
 
-    # Restore variables from disk.
-    restorer.restore(sess, cfg.init_weights)
+    # Restore pretrained pGAN, if cannot, retore pretrained resnet
+    could_load,checkpoint_counter = load_checkpoint(sess,saver,cfg)
+    if could_load:
+        counter = checkpoint_counter
+        print ('load checkpoint success')
+    else:
+        counter = 0
+        print ('load checkpoint failed')
+        print ('start to load resnet_v1')
+        variables_to_restore_backbone = slim.get_variables_to_restore(include=["resnet_v1"])
+        restorer_backbone = tf.train.Saver(variables_to_restore_backbone)
+        restorer_backbone.restore(sess, cfg.init_weights)
 
     max_iter = int(cfg.max_iter)
 
     display_iters = cfg.display_iters
-    cum_loss = 0.0
+    cum_loss_inter = 0.0
+    cum_loss_G = 0.0
+    cum_loss_D = 0.0
+    cum_loss_recon = 0.0
+    for it in range(counter,max_iter+1):
 
-    for it in range(sess.run(global_step),max_iter+1):
-
-        [_, loss_val, summary] = sess.run([train_op, total_loss, merged_summaries])
-        cum_loss += loss_val
+        [_, _, _,_,
+        loss_val_inter, loss_val_G, loss_val_D,loss_val_recon,
+         summary] = sess.run([train_op,train_op_G,train_op_D,train_op_recon
+                            total_loss_inter,loss_G,loss_D,loss_recon
+                             merged_summaries])
+        cum_loss_inter += loss_val_inter
+        cum_loss_G += loss_val_G
+        cum_loss_D += loss_val_D
+        cum_loss_recon += loss_val_recon
         train_writer.add_summary(summary, it)
 
         if it % display_iters == 0:
-            average_loss = cum_loss / display_iters
-            cum_loss = 0.0
-            print("iteration: {} loss: {} "
-                         .format(it, "{0:.4f}".format(average_loss)))
-
+            average_loss_inter = cum_loss_inter / display_iters
+            average_loss_G = cum_loss_G / display_iters
+            average_loss_D = cum_loss_D / display_iters
+            average_loss_recon = cum_loss_recon / display_iters
+            cum_loss_inter = 0.0
+            cum_loss_G = 0.0
+            cum_loss_D = 0.0
+            cum_loss_recon = 0.0
+            print ("iteration:[%d], loss_inter: %.4f, loss_G: %.4f, loss_D: %.4f, loss_recon: %.4f"
+                % (it, average_loss_inter,average_loss_G,average_loss_D,average_loss_recon))
         # Save snapshot
         if (it % cfg.save_iters == 0 and it != 0) or it == max_iter:
-            model_name = cfg.save_path + cfg.snapshot_prefix
-            saver.save(sess, model_name, global_step=it)
-            print ('saved model once')
+            save_checkpoint(it,sess,saver,cfg)
+            print ('saved model with iteration[%d]'%it)
 
     sess.close()
     coord.request_stop()
@@ -128,6 +198,4 @@ def train():
 
 
 if __name__ == '__main__':
-    if not os.path.exists(cfg.save_path):
-        os.mkdir(cfg.save_path)
     train()

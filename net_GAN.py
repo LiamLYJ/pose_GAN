@@ -38,10 +38,67 @@ def prediction_layer(cfg, input, name, num_outputs):
             return pred
 
 
+def _leaky_relu(x):
+    return tf.where(tf.greater(x,0),x,0.01*x)
+
+
 class pose_gan(object):
+
+    class resblock(object):
+        def __init__(self,channel,name,ac_fn = tf.nn.relu,weight_decay=0.0005):
+            self.ac_fn = ac_fn
+            self.name = name
+            self.weight_decay = weight_decay
+            self.ch = channel
+        def __call__(self,x):
+            with slim.arg_scope([slim.conv2d],padding = 'SAME',biases_initializer = tf.zeros_initializer(),
+                weights_initializer = tf.truncated_normal_initializer(stddev=0.01), activation_fn = self.ac_fn,
+                weights_regularizer = slim.l2_regularizer(self.weight_decay)):
+
+                out = slim.conv2d(x,self.ch,[3,3],scope = self.name + '_conv1')
+                out = slim.conv2d(out,self.ch,[3,3],scope = self.name + '_conv2')
+                out += x
+            return out
+    #
+    # class batch_norm(object):
+    #     def __init__(self, epsilon=1e-5, momentum = 0.9, name="batch_norm"):
+    #         with tf.variable_scope(name):
+    #             self.epsilon  = epsilon
+    #             self.momentum = momentum
+    #             self.name = name
+    #
+    #      def __call__(self, x, train=True):
+    #         return tf.contrib.layers.batch_norm(x,
+    #                           decay=self.momentum,
+    #                           updates_collections=None,
+    #                           epsilon=self.epsilon,
+    #                           scale=True,
+    #                           is_training=train,
+    #                           scope=self.name)
 
     def __init__(self,cfg):
         self.cfg = cfg
+        #
+        # self.d_bn1 = batch_norm(name = 'd_bn1')
+        # self.d_bn2 = batch_norm(name = 'd_bn2')
+        # self.d_bn3 = batch_norm(name = 'd_bn3')
+        # self.d_bn4 = batch_norm(name = 'd_bn4')
+        # self.d_bn5 = batch_norm(name = 'd_bn5')
+        # self.d_bn6 = batch_norm(name = 'd_bn6')
+
+        self.g_e_res1 = resblock(64,'g_e_res1')
+        self.g_e_res2 = resblock(128,'g_e_res2')
+        self.g_e_res3 = resblock(256,'g_e_res3')
+        self.g_e_res4 = resblock(384,'g_e_res4')
+        self.g_e_res5 = resblock(512,'g_e_res5')
+        self.g_e_res6 = resblock(640,'g_e_res6')
+
+        self.g_d_res1 = resblock(640,'g_d_res1')
+        self.g_d_res2 = resblock(512,'g_d_res2')
+        self.g_d_res3 = resblock(384,'g_d_res3')
+        self.g_d_res4 = resblock(256,'g_d_res4')
+        self.g_d_res5 = resblock(128,'g_d_res5')
+        self.g_d_res6 = resblock(64,'g_d_res6')
 
     def part_detection_loss(self, heads, batch, locref, intermediate):
         cfg = self.cfg
@@ -127,10 +184,76 @@ class pose_gan(object):
             outputs['locref'] = heads['locref']
         return outputs
 
+    def generator(self,inputs,heat):
+        x = tf.concat([inputs,heat],3)
+
+        with slim.arg_scope([slim.conv2d,slim.fully_connected,slim.conv2d_transpose],
+            biases_initializer = tf.zeros_initializer(),
+            weights_initializer = tf.truncated_normal_initializer(stddev=0.01), activation_fn = None,
+            weights_regularizer = slim.l2_regularizer(0.0005)):
+            with slim.arg_scope([slim.conv2d,slim.conv2d_transpose], padding = 'SAME'):
+                out_from_e_1 = self.g_e_res1(slim.conv2d(x,64,[3,3],scope= 'g_conv1'))
+                out_from_e_2 = self.g_e_res2(slim.conv2d(out_from_e_1,128,[3,3],stride = 2,scope = 'g_conv2'))
+                out_from_e_3 = self.g_e_res3(slim.conv2d(out_from_e_2,256,[3,3],stride = 2,scope = 'g_conv3'))
+                out_from_e_4 = self.g_e_res4(slim.conv2d(out_from_e_3,384,[3,3],stride = 2,scope = 'g_conv4'))
+                out_from_e_5 = self.g_e_res5(slim.conv2d(out_from_e_4,512,[3,3],stride = 2,scope = 'g_conv5'))
+                out_from_e_6 = self.g_e_res6(slim.conv2d(out_from_e_5,640,[3,3],stride = 2,scope = 'g_conv6'))
+                out_from_e =  slim.conv2d(out_from_e_6,640,[3,3],scope = 'g_conv7')
+
+                out_from_e_ = slim.flatten(out_from_e)
+                out_from_fc = slim.fully_connected(out_from_e_,64,scope = 'g_fc1')
+                out_from_fc = slim.fully_connected(out_from_fc,tf.shape(out_from_e_)[1],scope ='g_fc2')
+                out_from_fc = tf.reshape(out_from_fc,tf.shape(out_from_e))
+
+                out_from_d_1 = slim.conv2d_transpose(self.g_d_res1(out_from_fc+out_from_e_6),512,[3,3],stride=2,scope='g_dconv1')
+                out_from_d_2 = slim.conv2d_transpose(self.g_d_res2(out_from_d_1+out_from_e_5),384,[3,3],stride=2,scope='g_dconv2')
+                out_from_d_3 = slim.conv2d_transpose(self.g_d_res3(out_from_d_2+out_from_e_4),256,[3,3],stride=2,scope='g_dconv3')
+                out_from_d_4 = slim.conv2d_transpose(self.g_d_res4(out_from_d_3+out_from_e_3),128,[3,3],stride=2,scope='g_dconv4')
+                out_from_d_5 = slim.conv2d_transpose(self.g_d_res5(out_from_d_4+out_from_e_2),64,[3,3],stride=2,'g_dconv5')
+                out_from_d_6 = slim.conv2d_transpose(self.g_d_res6(out_from_d_5+out_from_e_1),1,[3,3],'g_dconv6')
+
+                return out_from_d_6
+
+
+    def discriminator(self,inputs,structure):
+        x = tf.concat([inputs,structure],3)
+        ndf = 64
+
+        with slim.arg_scope([slim.conv2d,slim.fully_connected], padding = 'SAME',
+            weights_initializer = tf.truncated_normal_initializer(stddev=0.01), activation_fn = _leaky_relu,
+            weights_regularizer = slim.l2_regularizer(0.0005),
+            biases_initializer = tf.zeros_initializer()):
+            with slim.arg_scope([slim.conv2d], padding = 'SAME',normalizer_fn = slim.bath_norm,
+            normalizer_params={'is_training':True,'decay' =0.5}):
+                out = slim.conv2d(x,ndf,[4,4],stride = 2,scope = 'd_conv1')
+                out = slim.conv2d(out,ndf*2,[4,4],stride = 2,scope = 'd_conv2')
+                out = slim.conv2d(out,ndf*4,[4,4],stride = 2,scope ='d_conv3')
+                out = slim.conv2d(out,ndf*8,[4,4],stride = 2,scope ='d_conv4')
+                out = slim.conv2d(out,ndf*16,[4,4],stride = 2,scope ='d_conv5')
+
+                out = slim.flatten(out)
+                logits = slim.fully_connected(out,1,activation_fn = None,scope = 'd_fc')
+
+                return logits,tf.nn.sigmoid(logits)
+
 
     def train(self,batch):
         cfg = self.cfg
         intermediate = cfg.intermediate_supervision
         locref = cfg.location_refinement
         heads = self.get_net(batch[Batch.inputs])
-        return self.part_detection_loss(heads, batch, locref, intermediate),heads
+        loss_inter = self.part_detection_loss(heads, batch, locref, intermediate)
+
+        # get adversarial losses and reconstruction loss
+        structure_hat = self.generator(batch[Batch.inputs],heads['part_pred'])
+        d_real_logits,d_real = self.discriminator(batch[Batch.inputs],batch[Batch.pose_target])
+        d_fake_logits,d_fake = self.discriminator(batch[Batch.inputs],structure_hat)
+        loss_G = tf.reduce_mean(tf.nn.sigmoid_cross_entropy(
+            logits = d_fake_logits, labels = tf.ones_like(d_fake)))
+        loss_D = (tf.reduce_mean(tf.nn.sigmoid_cross_entropy(
+            logits = d_fake_logits, labels = tf.zeros_like(d_fake))) + \
+            tf.reduce_mean(tf.nn.sigmoid_cross_entropy(
+            logits = d_real_logits, labels = tf.ones_like(d_real))) ) * 0.5
+
+        loss_rec = losses.huber_loss(batch[Batch.pose_target],structure_hat)
+        return loss_inter, loss_G, loss_D , loss_rec, heads, d_real, d_fake
