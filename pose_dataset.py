@@ -237,7 +237,7 @@ class PoseDataset:
 
             joint_id = [person_joints[:, 0].astype(int) for person_joints in joints]
             batch = self.compute_targets_and_weights(joint_id, scaled_joints, data_item, sm_size, scale, batch)
-            batch = self.compute_pose(joint_id,scaled_joints,data_item,sm_size,width_structure,batch)
+            batch = self.compute_pose(joint_id,scaled_joints,data_item,scaled_img_size,width_structure,batch)
 
         batch = {key: data_to_input(data) for (key, data) in batch.items()}
 
@@ -256,7 +256,7 @@ class PoseDataset:
     def compute_pose(self,joint_id,coords,data_item,size,width_structure,batch):
         radius = 1.5*width_structure
         # check_dic for draw lines between target joints
-        check_dic = {12:[8,9,13],7:[6,8],10:[9,11],2:[8,1],3:[4,9],0:1,5:4}
+        check_dic = {12:[8,9,13],7:[6,8],10:[9,11],2:[8,1],3:[4,9],0:[1],5:[4]}
         gt_pose = np.zeros(cat([size,arr([1])]))
         width = size[1]
         height = size[0]
@@ -264,28 +264,34 @@ class PoseDataset:
         for person_id in range(len(coords)):
             for k,j_id in enumerate(joint_id[person_id]):
                 joint_pt = coords[person_id][k, :]
+
                 j_x = np.asscalar(joint_pt[0])
                 j_y = np.asscalar(joint_pt[1])
 
                 min_x = int(max(j_x - radius -1, 0))
                 max_x = int(min(j_x + radius +1, width -1))
                 min_y = int(max(j_y - radius -1, 0))
-                max_y = int(min(j_y - radius +1, height -1))
+                max_y = int(min(j_y + radius +1, height -1))
 
-                gt_pose[[min_y : max_y, min_x: max_x]] = 1
+                gt_pose[min_y : max_y, min_x: max_x,0] = 1
 
+            # print (coords[person_id])
+            # print (joint_id[person_id])
             for index in range(len(joint_id[person_id])):
                 if check_dic.has_key(joint_id[person_id][index]):
                     connect_id = check_dic[joint_id[person_id][index]]
                     anchor_j = coords[person_id][index,:]
-                    connect_j_index = [joint_id[person_id].index(value) for value in connect_id]
+                    connect_j_index = [list(joint_id[person_id]).index(value) for value in connect_id]
                     connect_j = coords[person_id][connect_j_index,:]
                     assert connect_j.shape[0] == len(connect_id)
-                    for k in len(connect_id):
+                    for k in range(len(connect_id)):
                         pt1 = tuple(anchor_j.astype(int))
                         pt2 = tuple(connect_j[k,:].astype(int))
                         cv2.line(gt_pose,pt1,pt2,1,width_structure)
 
+        # cv2.imshow('img',gt_pose)
+        # cv2.waitKey(0)
+        # raise
         batch.update({
             Batch.pose_target: gt_pose
         })

@@ -51,15 +51,19 @@ def start_preloading(sess, enqueue_op, dataset, placeholders):
 
 def get_optimizer(loss_op, cfg,whichone ='inter'):
 
-    if (cfg.optimizer_name == "adam" and (whichone in ('G','D','inter','recon'))):
+    if (cfg.optimizer_name == 'adam' and (whichone in ('G','D','inter','recon'))):
         if whichone == 'inter':
             optimizer = tf.train.AdamOptimizer(cfg.learning_rate_inter)
+            # optimizer = tf.train.MomentumOptimizer(learning_rate=cfg.learning_rate_inter, momentum=0.9)
         if whichone == 'G':
             optimizer = tf.train.AdamOptimizer(cfg.learning_rate_G)
+            # optimizer = tf.train.MomentumOptimizer(learning_rate=cfg.learning_rate_G, momentum=0.9)
         if whichone == 'D':
             optimizer = tf.train.AdamOptimizer(cfg.learning_rate_D)
+            # optimizer = tf.train.MomentumOptimizer(learning_rate=cfg.learning_rate_D, momentum=0.9)
         if whichone == 'recon':
             optimizer = tf.train.AdamOptimizer(cfg.learning_rate_recon)
+            # optimizer = tf.train.MomentumOptimizer(learning_rate=cfg.learning_rate_recon, momentum=0.9)
     else:
         raise ValueError('unknown optimizer {}'.format(cfg.optimizer))
     train_op = slim.learning.create_train_op(loss_op, optimizer)
@@ -69,7 +73,7 @@ def get_optimizer(loss_op, cfg,whichone ='inter'):
 
 def save_checkpoint(step,sess,saver,cfg):
     model_name = "pGAN.model"
-    model_dir = cfg.dataset
+    model_dir = cfg.dataset_name
     checkpoint_dir = cfg.checkpoint_dir
     checkpoint_dir = os.path.join(checkpoint_dir, model_dir)
 
@@ -83,8 +87,8 @@ def save_checkpoint(step,sess,saver,cfg):
 def load_checkpoint(sess,saver,cfg):
     import re
     print(" [*] Reading checkpoint...")
-    model_dir = cfg.dataset
-    checkpoint_dir = cfg.checkpoint_dirs
+    model_dir = cfg.dataset_name
+    checkpoint_dir = cfg.checkpoint_dir
     checkpoint_dir = os.path.join(checkpoint_dir, model_dir)
 
     ckpt = tf.train.get_checkpoint_state(checkpoint_dir)
@@ -107,8 +111,13 @@ def train():
     batch_spec = get_batch_spec(cfg)
     batch, enqueue_op, placeholders = setup_preloading(batch_spec)
 
-    losses_inter,loss_G,loss_D,loss_recon,heads,d_real,d_fake = pose_gan(cfg).train(batch)
+    losses_inter,loss_G,loss_D,loss_recon,heads,d_real,d_fake,structure_hat = pose_gan(cfg).train(batch)
     total_loss_inter = losses_inter['total_loss']
+
+    total_loss_inter = cfg.weight_inter * total_loss_inter
+    loss_G = cfg.weight_G * loss_G
+    loss_D = cfg.weight_D * loss_D
+    loss_recon = cfg.weight_recon * loss_recon
 
     tf.summary.histogram('d_real',d_real)
     tf.summary.histogram('d_fake',d_fake)
@@ -120,12 +129,15 @@ def train():
     tf.summary.scalar('loss_recon',loss_recon)
 
     tf.summary.image('train_im',batch[Batch.inputs])
-
+    tf.summary.image('pose_target',batch[Batch.pose_target])
     tf.summary.image('pred_heat',tf.sigmoid(heads['part_pred']))
+    tf.summary.image('structure_hat',structure_hat)
 
     merged_summaries = tf.summary.merge_all()
 
     saver = tf.train.Saver()
+    variables_to_restore_backbone = slim.get_variables_to_restore(include=["resnet_v1"])
+    restorer_backbone = tf.train.Saver(variables_to_restore_backbone)
 
     sess = tf.Session()
 
@@ -138,7 +150,8 @@ def train():
     extra_update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
     with tf.control_dependencies(extra_update_ops):
         train_op_D = get_optimizer(loss_D,cfg,'D')
-    train_op_recon = get_optimizer(loss_recon,'recon')
+    # train_op_D = get_optimizer(loss_D,cfg,'D')
+    train_op_recon = get_optimizer(loss_recon,cfg,'recon')
 
     sess.run(tf.global_variables_initializer())
     sess.run(tf.local_variables_initializer())
@@ -152,8 +165,6 @@ def train():
         counter = 0
         print ('load checkpoint failed')
         print ('start to load resnet_v1')
-        variables_to_restore_backbone = slim.get_variables_to_restore(include=["resnet_v1"])
-        restorer_backbone = tf.train.Saver(variables_to_restore_backbone)
         restorer_backbone.restore(sess, cfg.init_weights)
 
     max_iter = int(cfg.max_iter)
@@ -167,8 +178,8 @@ def train():
 
         [_, _, _,_,
         loss_val_inter, loss_val_G, loss_val_D,loss_val_recon,
-         summary] = sess.run([train_op,train_op_G,train_op_D,train_op_recon
-                            total_loss_inter,loss_G,loss_D,loss_recon
+         summary] = sess.run([train_op_inter,train_op_G,train_op_D,train_op_recon,
+                            total_loss_inter,loss_G,loss_D,loss_recon,
                              merged_summaries])
         cum_loss_inter += loss_val_inter
         cum_loss_G += loss_val_G

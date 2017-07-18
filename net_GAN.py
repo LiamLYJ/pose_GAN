@@ -59,7 +59,7 @@ class pose_gan(object):
                 out = slim.conv2d(out,self.ch,[3,3],scope = self.name + '_conv2')
                 out += x
             return out
-    #
+
     # class batch_norm(object):
     #     def __init__(self, epsilon=1e-5, momentum = 0.9, name="batch_norm"):
     #         with tf.variable_scope(name):
@@ -86,19 +86,19 @@ class pose_gan(object):
         # self.d_bn5 = batch_norm(name = 'd_bn5')
         # self.d_bn6 = batch_norm(name = 'd_bn6')
 
-        self.g_e_res1 = resblock(64,'g_e_res1')
-        self.g_e_res2 = resblock(128,'g_e_res2')
-        self.g_e_res3 = resblock(256,'g_e_res3')
-        self.g_e_res4 = resblock(384,'g_e_res4')
-        self.g_e_res5 = resblock(512,'g_e_res5')
-        self.g_e_res6 = resblock(640,'g_e_res6')
+        self.g_e_res1 = self.resblock(64,'g_e_res1')
+        self.g_e_res2 = self.resblock(128,'g_e_res2')
+        self.g_e_res3 = self.resblock(256,'g_e_res3')
+        self.g_e_res4 = self.resblock(384,'g_e_res4')
+        self.g_e_res5 = self.resblock(512,'g_e_res5')
+        self.g_e_res6 = self.resblock(640,'g_e_res6')
 
-        self.g_d_res1 = resblock(640,'g_d_res1')
-        self.g_d_res2 = resblock(512,'g_d_res2')
-        self.g_d_res3 = resblock(384,'g_d_res3')
-        self.g_d_res4 = resblock(256,'g_d_res4')
-        self.g_d_res5 = resblock(128,'g_d_res5')
-        self.g_d_res6 = resblock(64,'g_d_res6')
+        self.g_d_res1 = self.resblock(640,'g_d_res1')
+        self.g_d_res2 = self.resblock(512,'g_d_res2')
+        self.g_d_res3 = self.resblock(384,'g_d_res3')
+        self.g_d_res4 = self.resblock(256,'g_d_res4')
+        self.g_d_res5 = self.resblock(128,'g_d_res5')
+        self.g_d_res6 = self.resblock(64,'g_d_res6')
 
     def part_detection_loss(self, heads, batch, locref, intermediate):
         cfg = self.cfg
@@ -184,57 +184,65 @@ class pose_gan(object):
             outputs['locref'] = heads['locref']
         return outputs
 
-    def generator(self,inputs,heat):
+    def generator(self,inputs,heat, reuse = None):
+        inputs = tf.image.resize_images(inputs,(320,128))
+        heat = tf.image.resize_images(heat,(320,128))
         x = tf.concat([inputs,heat],3)
+        with tf.variable_scope('generator',reuse = reuse) as net_scope:
+            if reuse:
+                net_scope.reuse_variables()
+            with slim.arg_scope([slim.conv2d,slim.fully_connected,slim.conv2d_transpose],
+                biases_initializer = tf.zeros_initializer(),
+                weights_initializer = tf.truncated_normal_initializer(stddev=0.01), activation_fn = None,
+                weights_regularizer = slim.l2_regularizer(0.0005)):
+                with slim.arg_scope([slim.conv2d,slim.conv2d_transpose], padding = 'SAME'):
+                    out_from_e_1 = self.g_e_res1(slim.conv2d(x,64,[3,3],scope= 'g_conv1'))
+                    out_from_e_2 = self.g_e_res2(slim.conv2d(out_from_e_1,128,[3,3],stride = 2,scope = 'g_conv2'))
+                    out_from_e_3 = self.g_e_res3(slim.conv2d(out_from_e_2,256,[3,3],stride = 2,scope = 'g_conv3'))
+                    out_from_e_4 = self.g_e_res4(slim.conv2d(out_from_e_3,384,[3,3],stride = 2,scope = 'g_conv4'))
+                    out_from_e_5 = self.g_e_res5(slim.conv2d(out_from_e_4,512,[3,3],stride = 2,scope = 'g_conv5'))
+                    out_from_e_6 = self.g_e_res6(slim.conv2d(out_from_e_5,640,[3,3],stride = 2,scope = 'g_conv6'))
+                    out_from_e =  slim.conv2d(out_from_e_6,640,[3,3],scope = 'g_conv7')
 
-        with slim.arg_scope([slim.conv2d,slim.fully_connected,slim.conv2d_transpose],
-            biases_initializer = tf.zeros_initializer(),
-            weights_initializer = tf.truncated_normal_initializer(stddev=0.01), activation_fn = None,
-            weights_regularizer = slim.l2_regularizer(0.0005)):
-            with slim.arg_scope([slim.conv2d,slim.conv2d_transpose], padding = 'SAME'):
-                out_from_e_1 = self.g_e_res1(slim.conv2d(x,64,[3,3],scope= 'g_conv1'))
-                out_from_e_2 = self.g_e_res2(slim.conv2d(out_from_e_1,128,[3,3],stride = 2,scope = 'g_conv2'))
-                out_from_e_3 = self.g_e_res3(slim.conv2d(out_from_e_2,256,[3,3],stride = 2,scope = 'g_conv3'))
-                out_from_e_4 = self.g_e_res4(slim.conv2d(out_from_e_3,384,[3,3],stride = 2,scope = 'g_conv4'))
-                out_from_e_5 = self.g_e_res5(slim.conv2d(out_from_e_4,512,[3,3],stride = 2,scope = 'g_conv5'))
-                out_from_e_6 = self.g_e_res6(slim.conv2d(out_from_e_5,640,[3,3],stride = 2,scope = 'g_conv6'))
-                out_from_e =  slim.conv2d(out_from_e_6,640,[3,3],scope = 'g_conv7')
+                    out_from_e_ = slim.flatten(out_from_e)
+                    out_from_fc = slim.fully_connected(out_from_e_,64,scope = 'g_fc1')
+                    out_from_fc = slim.fully_connected(out_from_fc,int(out_from_e_.shape[1]),scope ='g_fc2')
+                    out_from_fc = tf.reshape(out_from_fc,tf.shape(out_from_e))
 
-                out_from_e_ = slim.flatten(out_from_e)
-                out_from_fc = slim.fully_connected(out_from_e_,64,scope = 'g_fc1')
-                out_from_fc = slim.fully_connected(out_from_fc,tf.shape(out_from_e_)[1],scope ='g_fc2')
-                out_from_fc = tf.reshape(out_from_fc,tf.shape(out_from_e))
+                    out_from_d_1 = slim.conv2d_transpose(self.g_d_res1(out_from_fc+out_from_e_6),512,[3,3],stride=2,scope='g_dconv1')
+                    out_from_d_2 = slim.conv2d_transpose(self.g_d_res2(out_from_d_1+out_from_e_5),384,[3,3],stride=2,scope='g_dconv2')
+                    out_from_d_3 = slim.conv2d_transpose(self.g_d_res3(out_from_d_2+out_from_e_4),256,[3,3],stride=2,scope='g_dconv3')
+                    out_from_d_4 = slim.conv2d_transpose(self.g_d_res4(out_from_d_3+out_from_e_3),128,[3,3],stride=2,scope='g_dconv4')
+                    out_from_d_5 = slim.conv2d_transpose(self.g_d_res5(out_from_d_4+out_from_e_2),64,[3,3],stride=2,scope='g_dconv5')
+                    out_from_d_6 = slim.conv2d_transpose(self.g_d_res6(out_from_d_5+out_from_e_1),1,[3,3],scope='g_dconv6')
 
-                out_from_d_1 = slim.conv2d_transpose(self.g_d_res1(out_from_fc+out_from_e_6),512,[3,3],stride=2,scope='g_dconv1')
-                out_from_d_2 = slim.conv2d_transpose(self.g_d_res2(out_from_d_1+out_from_e_5),384,[3,3],stride=2,scope='g_dconv2')
-                out_from_d_3 = slim.conv2d_transpose(self.g_d_res3(out_from_d_2+out_from_e_4),256,[3,3],stride=2,scope='g_dconv3')
-                out_from_d_4 = slim.conv2d_transpose(self.g_d_res4(out_from_d_3+out_from_e_3),128,[3,3],stride=2,scope='g_dconv4')
-                out_from_d_5 = slim.conv2d_transpose(self.g_d_res5(out_from_d_4+out_from_e_2),64,[3,3],stride=2,'g_dconv5')
-                out_from_d_6 = slim.conv2d_transpose(self.g_d_res6(out_from_d_5+out_from_e_1),1,[3,3],'g_dconv6')
-
-                return out_from_d_6
+                    return out_from_d_6
 
 
-    def discriminator(self,inputs,structure):
+    def discriminator(self,inputs,structure,reuse = None):
+        inputs = tf.image.resize_images(inputs,(320,128))
+        structure = tf.image.resize_images(structure,(320,128))
         x = tf.concat([inputs,structure],3)
         ndf = 64
+        with tf.variable_scope('discriminator',reuse = reuse) as net_scope:
+            if reuse:
+                net_scope.reuse_variables()
+            with slim.arg_scope([slim.conv2d,slim.fully_connected],
+                weights_initializer = tf.truncated_normal_initializer(stddev=0.01), activation_fn = _leaky_relu,
+                weights_regularizer = slim.l2_regularizer(0.0005),
+                biases_initializer = tf.zeros_initializer()):
+                with slim.arg_scope([slim.conv2d], padding = 'SAME',normalizer_fn = slim.batch_norm,
+                normalizer_params={'is_training':True,'decay':0.5}):
+                    out = slim.conv2d(x,ndf,[4,4],stride = 2,scope = 'd_conv1')
+                    out = slim.conv2d(out,ndf*2,[4,4],stride = 2,scope = 'd_conv2')
+                    out = slim.conv2d(out,ndf*4,[4,4],stride = 2,scope ='d_conv3')
+                    out = slim.conv2d(out,ndf*8,[4,4],stride = 2,scope ='d_conv4')
+                    out = slim.conv2d(out,ndf*16,[4,4],stride = 2,scope ='d_conv5')
 
-        with slim.arg_scope([slim.conv2d,slim.fully_connected], padding = 'SAME',
-            weights_initializer = tf.truncated_normal_initializer(stddev=0.01), activation_fn = _leaky_relu,
-            weights_regularizer = slim.l2_regularizer(0.0005),
-            biases_initializer = tf.zeros_initializer()):
-            with slim.arg_scope([slim.conv2d], padding = 'SAME',normalizer_fn = slim.bath_norm,
-            normalizer_params={'is_training':True,'decay' =0.5}):
-                out = slim.conv2d(x,ndf,[4,4],stride = 2,scope = 'd_conv1')
-                out = slim.conv2d(out,ndf*2,[4,4],stride = 2,scope = 'd_conv2')
-                out = slim.conv2d(out,ndf*4,[4,4],stride = 2,scope ='d_conv3')
-                out = slim.conv2d(out,ndf*8,[4,4],stride = 2,scope ='d_conv4')
-                out = slim.conv2d(out,ndf*16,[4,4],stride = 2,scope ='d_conv5')
+                    out = slim.flatten(out)
+                    logits = slim.fully_connected(out,1,activation_fn = None,scope = 'd_fc')
 
-                out = slim.flatten(out)
-                logits = slim.fully_connected(out,1,activation_fn = None,scope = 'd_fc')
-
-                return logits,tf.nn.sigmoid(logits)
+                    return logits,tf.nn.sigmoid(logits)
 
 
     def train(self,batch):
@@ -247,13 +255,14 @@ class pose_gan(object):
         # get adversarial losses and reconstruction loss
         structure_hat = self.generator(batch[Batch.inputs],heads['part_pred'])
         d_real_logits,d_real = self.discriminator(batch[Batch.inputs],batch[Batch.pose_target])
-        d_fake_logits,d_fake = self.discriminator(batch[Batch.inputs],structure_hat)
-        loss_G = tf.reduce_mean(tf.nn.sigmoid_cross_entropy(
+        d_fake_logits,d_fake = self.discriminator(batch[Batch.inputs],structure_hat,reuse = True)
+        loss_G = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(
             logits = d_fake_logits, labels = tf.ones_like(d_fake)))
-        loss_D = (tf.reduce_mean(tf.nn.sigmoid_cross_entropy(
+        loss_D = (tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(
             logits = d_fake_logits, labels = tf.zeros_like(d_fake))) + \
-            tf.reduce_mean(tf.nn.sigmoid_cross_entropy(
+            tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(
             logits = d_real_logits, labels = tf.ones_like(d_real))) ) * 0.5
 
-        loss_rec = losses.huber_loss(batch[Batch.pose_target],structure_hat)
-        return loss_inter, loss_G, loss_D , loss_rec, heads, d_real, d_fake
+        loss_rec = losses.huber_loss(tf.image.resize_images(batch[Batch.pose_target],(320,128)),
+                    tf.image.resize_images(structure_hat,(320,128)))
+        return loss_inter, loss_G, loss_D , loss_rec, heads, d_real, d_fake,structure_hat

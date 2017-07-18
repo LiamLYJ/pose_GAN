@@ -78,7 +78,11 @@ tf.app.flags.DEFINE_integer(
 )
 tf.app.flags.DEFINE_string(
     'dataset', '/home/hpc/ssd/lyj/liu_data/dataset.mat',
-    'dataset name'
+    'where to load dataset mat file'
+)
+tf.app.flags.DEFINE_string(
+    'dataset_name', 'customer',
+    'the name of dataset'
 )
 tf.app.flags.DEFINE_string(
     'dataset_type', 'mpii',
@@ -113,11 +117,11 @@ tf.app.flags.DEFINE_integer(
     'max input image size'
 )
 tf.app.flags.DEFINE_integer(
-    'display_iters', 20,
+    'display_iters', 10,
     'how frequency need to display'
 )
 tf.app.flags.DEFINE_integer(
-    'save_iters', 50000,
+    'save_iters', 10000,
     'how frequency need to save model'
 )
 tf.app.flags.DEFINE_float(
@@ -144,9 +148,25 @@ tf.app.flags.DEFINE_bool(
     'weigh_only_present_joints', False,
     'if only weight the present joints'
 )
-tf.app.flags.DEFINE_float(
-    'width_structure', 1.5,
+tf.app.flags.DEFINE_integer(
+    'width_structure', 5,
     'width of the structure'
+)
+tf.app.flags.DEFINE_float(
+    'weight_inter', 10.0,
+    'loss weight for inter'
+)
+tf.app.flags.DEFINE_float(
+    'weight_G', 1.0,
+    'loss weight for generator'
+)
+tf.app.flags.DEFINE_float(
+    'weight_D', 1.0,
+    'loss weight for discriminator'
+)
+tf.app.flags.DEFINE_float(
+    'weight_recon', 10.0,
+    'loss weight for reconstruction'
 )
 # cfg.weigh_negatives = False
 # cfg.fg_fraction = 0.25
