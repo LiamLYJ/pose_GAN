@@ -216,7 +216,9 @@ class pose_gan(object):
                     out_from_d_5 = slim.conv2d_transpose(self.g_d_res5(out_from_d_4+out_from_e_2),64,[3,3],stride=2,scope='g_dconv5')
                     out_from_d_6 = slim.conv2d_transpose(self.g_d_res6(out_from_d_5+out_from_e_1),1,[3,3],scope='g_dconv6')
 
-                    return out_from_d_6
+                    # output = tf.nn.sigmoid(out_from_d_6)
+                    output = out_from_d_6
+                    return output
 
 
     def discriminator(self,inputs,structure,reuse = None):
@@ -253,7 +255,9 @@ class pose_gan(object):
         loss_inter = self.part_detection_loss(heads, batch, locref, intermediate)
 
         # get adversarial losses and reconstruction loss
-        structure_hat = self.generator(batch[Batch.inputs],heads['part_pred'])
+        # structure_hat = self.generator(batch[Batch.inputs],heads['part_pred'])
+        structure_hat = self.generator(batch[Batch.inputs],batch[Batch.part_score_targets])
+
         d_real_logits,d_real = self.discriminator(batch[Batch.inputs],batch[Batch.pose_target])
         d_fake_logits,d_fake = self.discriminator(batch[Batch.inputs],structure_hat,reuse = True)
         loss_G = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(
@@ -263,6 +267,10 @@ class pose_gan(object):
             tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(
             logits = d_real_logits, labels = tf.ones_like(d_real))) ) * 0.5
 
-        loss_rec = losses.huber_loss(tf.image.resize_images(batch[Batch.pose_target],(320,128)),
-                    tf.image.resize_images(structure_hat,(320,128)))
+        # loss_rec = losses.huber_los(tf.image.resize_images(batch[Batch.pose_target],(320,128)),
+        #             tf.image.resize_images(structure_hat,(320,128)))
+        # loss_rec = tf.losses.absolute_difference(tf.image.resize_images(batch[Batch.pose_target],(320,128)),
+        #                 tf.image.resize_images(structure_hat,(320,128)))
+        loss_rec = tf.losses.mean_squared_error(tf.image.resize_images(batch[Batch.pose_target],(320,128)),
+                        tf.image.resize_images(structure_hat,(320,128)))
         return loss_inter, loss_G, loss_D , loss_rec, heads, d_real, d_fake,structure_hat

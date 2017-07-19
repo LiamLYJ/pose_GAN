@@ -11,6 +11,7 @@ from net_GAN import get_batch_spec
 from factory import create as create_dataset
 import config
 from pose_dataset import Batch
+from tensorflow.python import debug as tf_debug
 
 cfg = tf.app.flags.FLAGS
 
@@ -62,8 +63,9 @@ def get_optimizer(loss_op, cfg,whichone ='inter'):
             optimizer = tf.train.AdamOptimizer(cfg.learning_rate_D)
             # optimizer = tf.train.MomentumOptimizer(learning_rate=cfg.learning_rate_D, momentum=0.9)
         if whichone == 'recon':
-            optimizer = tf.train.AdamOptimizer(cfg.learning_rate_recon)
+            # optimizer = tf.train.AdamOptimizer(cfg.learning_rate_recon)
             # optimizer = tf.train.MomentumOptimizer(learning_rate=cfg.learning_rate_recon, momentum=0.9)
+            optimizer = tf.train.GradientDescentOptimizer(learning_rate = cfg.learning_rate_recon)
     else:
         raise ValueError('unknown optimizer {}'.format(cfg.optimizer))
     train_op = slim.learning.create_train_op(loss_op, optimizer)
@@ -130,6 +132,7 @@ def train():
 
     tf.summary.image('train_im',batch[Batch.inputs])
     tf.summary.image('pose_target',batch[Batch.pose_target])
+    tf.summary.image('locref_targets',batch[Batch.part_score_targets])
     tf.summary.image('pred_heat',tf.sigmoid(heads['part_pred']))
     tf.summary.image('structure_hat',structure_hat)
 
@@ -140,6 +143,7 @@ def train():
     restorer_backbone = tf.train.Saver(variables_to_restore_backbone)
 
     sess = tf.Session()
+    sess = tf_debug.LocalCLIDebugWrapperSession(sess)
 
     coord, thread = start_preloading(sess, enqueue_op, dataset, placeholders)
 
@@ -150,7 +154,6 @@ def train():
     extra_update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
     with tf.control_dependencies(extra_update_ops):
         train_op_D = get_optimizer(loss_D,cfg,'D')
-    # train_op_D = get_optimizer(loss_D,cfg,'D')
     train_op_recon = get_optimizer(loss_recon,cfg,'recon')
 
     sess.run(tf.global_variables_initializer())

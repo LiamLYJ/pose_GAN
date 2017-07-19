@@ -125,7 +125,7 @@ tf.app.flags.DEFINE_integer(
     'how frequency need to save model'
 )
 tf.app.flags.DEFINE_float(
-    'learning_rate_inter', 0.00001,
+    'learning_rate_inter', 0.000001,
     'learning rate for inter'
 )
 tf.app.flags.DEFINE_float(
@@ -137,7 +137,7 @@ tf.app.flags.DEFINE_float(
     'learning rate for Discriminator part'
 )
 tf.app.flags.DEFINE_float(
-    'learning_rate_recon', 0.0002,
+    'learning_rate_recon', 0.00000001,
     'learning rate for reconstruction loss'
 )
 tf.app.flags.DEFINE_integer(
@@ -153,19 +153,19 @@ tf.app.flags.DEFINE_integer(
     'width of the structure'
 )
 tf.app.flags.DEFINE_float(
-    'weight_inter', 10.0,
+    'weight_inter', 0,
     'loss weight for inter'
 )
 tf.app.flags.DEFINE_float(
-    'weight_G', 1.0,
+    'weight_G', 1,
     'loss weight for generator'
 )
 tf.app.flags.DEFINE_float(
-    'weight_D', 1.0,
+    'weight_D', 1,
     'loss weight for discriminator'
 )
 tf.app.flags.DEFINE_float(
-    'weight_recon', 10.0,
+    'weight_recon', 1,
     'loss weight for reconstruction'
 )
 # cfg.weigh_negatives = False

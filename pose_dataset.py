@@ -254,7 +254,7 @@ class PoseDataset:
 
 
     def compute_pose(self,joint_id,coords,data_item,size,width_structure,batch):
-        radius = 1.5*width_structure
+        radius = 1.2*width_structure
         # check_dic for draw lines between target joints
         check_dic = {12:[8,9,13],7:[6,8],10:[9,11],2:[8,1],3:[4,9],0:[1],5:[4]}
         gt_pose = np.zeros(cat([size,arr([1])]))
