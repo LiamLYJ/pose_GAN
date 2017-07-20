@@ -1,7 +1,6 @@
 import logging
 import random as rand
 from enum import Enum
-import cv2
 
 import numpy as np
 from numpy import array as arr
@@ -18,7 +17,6 @@ class Batch(Enum):
     locref_targets = 3
     locref_mask = 4
     data_item = 5
-    pose_target = 6
 
 
 def mirror_joints_map(all_joints, num_joints):
@@ -201,7 +199,6 @@ class PoseDataset:
 
 
     def make_batch(self, data_item, scale, mirror):
-        width_structure = self.cfg.width_structure
         im_file = data_item.im_path
         logging.debug('image %s', im_file)
         logging.debug('mirror %r', mirror)
@@ -237,7 +234,7 @@ class PoseDataset:
 
             joint_id = [person_joints[:, 0].astype(int) for person_joints in joints]
             batch = self.compute_targets_and_weights(joint_id, scaled_joints, data_item, sm_size, scale, batch)
-            batch = self.compute_pose(joint_id,scaled_joints,data_item,scaled_img_size,width_structure,batch)
+
 
         batch = {key: data_to_input(data) for (key, data) in batch.items()}
 
@@ -253,58 +250,12 @@ class PoseDataset:
         locref_map[j, i, j_id * 2 + 1] = dy * locref_scale
 
 
-    def compute_pose(self,joint_id,coords,data_item,size,width_structure,batch):
-        radius = 1.2*width_structure
-        # check_dic for draw lines between target joints
-        check_dic = {12:[8,9,13],7:[6,8],10:[9,11],2:[8,1],3:[4,9],0:[1],5:[4]}
-        gt_pose = np.zeros(cat([size,arr([1])]))
-        width = size[1]
-        height = size[0]
-
-        for person_id in range(len(coords)):
-            for k,j_id in enumerate(joint_id[person_id]):
-                joint_pt = coords[person_id][k, :]
-
-                j_x = np.asscalar(joint_pt[0])
-                j_y = np.asscalar(joint_pt[1])
-
-                min_x = int(max(j_x - radius -1, 0))
-                max_x = int(min(j_x + radius +1, width -1))
-                min_y = int(max(j_y - radius -1, 0))
-                max_y = int(min(j_y + radius +1, height -1))
-
-                gt_pose[min_y : max_y, min_x: max_x,0] = 1
-
-            # print (coords[person_id])
-            # print (joint_id[person_id])
-            for index in range(len(joint_id[person_id])):
-                if check_dic.has_key(joint_id[person_id][index]):
-                    connect_id = check_dic[joint_id[person_id][index]]
-                    anchor_j = coords[person_id][index,:]
-                    connect_j_index = [list(joint_id[person_id]).index(value) for value in connect_id]
-                    connect_j = coords[person_id][connect_j_index,:]
-                    assert connect_j.shape[0] == len(connect_id)
-                    for k in range(len(connect_id)):
-                        pt1 = tuple(anchor_j.astype(int))
-                        pt2 = tuple(connect_j[k,:].astype(int))
-                        cv2.line(gt_pose,pt1,pt2,1,width_structure)
-
-        # cv2.imshow('img',gt_pose)
-        # cv2.waitKey(0)
-        # raise
-        batch.update({
-            Batch.pose_target: gt_pose
-        })
-
-        return batch
-
-
     def compute_targets_and_weights(self, joint_id, coords, data_item, size, scale, batch):
         stride = self.cfg.stride
         dist_thresh = self.cfg.pos_dist_thresh * scale
         num_joints = self.cfg.num_joints
         half_stride = stride / 2
-        scmap = np.zeros(cat([size, arr([1])]))
+        scmap = np.zeros(cat([size, arr([num_joints])]))
 
         locref_shape = cat([size, arr([num_joints * 2])])
         locref_mask = np.zeros(locref_shape)
@@ -347,11 +298,11 @@ class PoseDataset:
                             current_normalized_dist = dist * locref_scale ** 2
                             prev_normalized_dist = locref_map[j, i, j_id * 2 + 0] ** 2 + \
                                                    locref_map[j, i, j_id * 2 + 1] ** 2
-                            update_scores = (scmap[j, i, 0] == 0) or prev_normalized_dist > current_normalized_dist
+                            update_scores = (scmap[j, i, j_id] == 0) or prev_normalized_dist > current_normalized_dist
                             if self.cfg.location_refinement and update_scores:
                                 self.set_locref(locref_map, locref_mask, locref_scale, i, j, j_id, dx, dy)
 
-                            scmap[j, i, 0] = 1
+                            scmap[j, i, j_id] = 1
 
         scmap_weights = self.compute_scmap_weights(scmap.shape, joint_id, data_item)
 

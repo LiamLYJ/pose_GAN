@@ -16,9 +16,8 @@ def get_batch_spec(cfg):
     batch_size = cfg.batch_size
     batch_spec = {
         Batch.inputs: [batch_size, None, None, 3],
-        Batch.part_score_targets: [batch_size, None, None, 1],
-        Batch.part_score_weights: [batch_size, None, None, 1],
-        Batch.pose_target: [batch_size, None, None, 1]
+        Batch.part_score_targets: [batch_size, None, None, num_joints],
+        Batch.part_score_weights: [batch_size, None, None, num_joints],
     }
     if cfg.location_refinement:
         batch_spec[Batch.locref_targets] = [batch_size, None, None, num_joints * 2]
@@ -154,7 +153,7 @@ class pose_gan(object):
 
         with tf.variable_scope(scope, reuse=reuse):
             out['part_pred'] = prediction_layer(cfg, features, 'part_pred',
-                                                1)
+                                                cfg.num_joints)
             if cfg.location_refinement:
                 out['locref'] = prediction_layer(cfg, features, 'locref_pred',
                                                  cfg.num_joints * 2)
@@ -163,7 +162,7 @@ class pose_gan(object):
                 block_interm_out = end_points[interm_name]
                 out['part_pred_interm'] = prediction_layer(cfg, block_interm_out,
                                                            'intermediate_supervision',
-                                                           1)
+                                                           cfg.num_joints)
         return out
 
 
@@ -253,6 +252,7 @@ class pose_gan(object):
         locref = cfg.location_refinement
         heads = self.get_net(batch[Batch.inputs])
         loss_inter = self.part_detection_loss(heads, batch, locref, intermediate)
+
 
         # get adversarial losses and reconstruction loss
         # structure_hat = self.generator(batch[Batch.inputs],heads['part_pred'])

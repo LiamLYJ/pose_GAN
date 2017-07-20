@@ -136,10 +136,6 @@ tf.app.flags.DEFINE_float(
     'learning_rate_D', 0.0002,
     'learning rate for Discriminator part'
 )
-tf.app.flags.DEFINE_float(
-    'learning_rate_recon', 0.00000001,
-    'learning rate for reconstruction loss'
-)
 tf.app.flags.DEFINE_integer(
     'max_iter', 10000000,
     'max iteration'
@@ -164,20 +160,3 @@ tf.app.flags.DEFINE_float(
     'weight_D', 1,
     'loss weight for discriminator'
 )
-tf.app.flags.DEFINE_float(
-    'weight_recon', 1,
-    'loss weight for reconstruction'
-)
-# cfg.weigh_negatives = False
-# cfg.fg_fraction = 0.25
-# cfg.scoremap_dir = "test"
-# cfg.use_gt_segm = False
-# cfg.video = False
-# cfg.video_batch = False
-# cfg.sparse_graph = []
-# cfg.pairwise_stats_collect = False
-# cfg.pairwise_stats_fn = "pairwise_stats.mat"
-# cfg.pairwise_predict = False
-# cfg.pairwise_huber_loss = True
-# cfg.pairwise_loss_weight = 1.0
-# cfg.tensorflow_pairwise_order = True
