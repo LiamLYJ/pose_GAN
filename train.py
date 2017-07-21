@@ -62,10 +62,6 @@ def get_optimizer(loss_op, cfg,whichone ='inter'):
         if whichone == 'D':
             optimizer = tf.train.AdamOptimizer(cfg.learning_rate_D)
             # optimizer = tf.train.MomentumOptimizer(learning_rate=cfg.learning_rate_D, momentum=0.9)
-        if whichone == 'recon':
-            # optimizer = tf.train.AdamOptimizer(cfg.learning_rate_recon)
-            # optimizer = tf.train.MomentumOptimizer(learning_rate=cfg.learning_rate_recon, momentum=0.9)
-            optimizer = tf.train.GradientDescentOptimizer(learning_rate = cfg.learning_rate_recon)
     else:
         raise ValueError('unknown optimizer {}'.format(cfg.optimizer))
     train_op = slim.learning.create_train_op(loss_op, optimizer)
@@ -113,37 +109,41 @@ def train():
     batch_spec = get_batch_spec(cfg)
     batch, enqueue_op, placeholders = setup_preloading(batch_spec)
 
-    losses_inter,loss_G,loss_D,loss_recon,heads,d_real,d_fake,structure_hat = pose_gan(cfg).train(batch)
+    lamda_fake = tf.placeholder(tf.float32,shape =[])
+    pose_Gan = pose_gan(cfg)
+    losses_inter,loss_G,loss_D_real,loss_D_fake,heads= pose_Gan.train(batch)
     total_loss_inter = losses_inter['total_loss']
+    lamda_fake = lamda_fake + cfg.weight_update_fake*(cfg.weight_real_importance * loss_D_real - loss_D_fake)
+    lamda_fake = tf.where(tf.greater(lamda_fake,1.0),1.0, lamda_fake)
+    lamda_fake = tf.where(tf.less(lamda_fake,0.0),0.0, lamda_fake)
+    loss_D = loss_D_real - lamda_fake * loss_D_fake
+    # total_loss_inter = cfg.weight_inter * total_loss_inter
+    # loss_G = cfg.weight_G * _loss_G
+    # loss_D = cfg.weight_D * _loss_D
 
-    total_loss_inter = cfg.weight_inter * total_loss_inter
-    loss_G = cfg.weight_G * loss_G
-    loss_D = cfg.weight_D * loss_D
-    loss_recon = cfg.weight_recon * loss_recon
+    G_sum = []
+    D_sum = []
+    inter_sum = []
 
-    tf.summary.histogram('d_real',d_real)
-    tf.summary.histogram('d_fake',d_fake)
+    D_sum.append(tf.summary.histogram('lamda_fake',lamda_fake))
     for k, t in losses_inter.items():
-        tf.summary.scalar(k, t)
+        inter_sum.append(tf.summary.scalar(k, t))
 
-    tf.summary.scalar('loss_G',loss_G)
-    tf.summary.scalar('loss_D',loss_D)
-    tf.summary.scalar('loss_recon',loss_recon)
+    G_sum.append(tf.summary.scalar('loss_G',loss_G))
+    D_sum.append(tf.summary.scalar('loss_D',loss_D))
+    D_sum.append(tf.summary.scalar('loss_D_real', loss_D_real))
+    D_sum.append(tf.summary.scalar('loss_D_fake', loss_D_fake))
 
-    tf.summary.image('train_im',batch[Batch.inputs])
-    tf.summary.image('pose_target',batch[Batch.pose_target])
-    tf.summary.image('locref_targets',batch[Batch.part_score_targets])
-    tf.summary.image('pred_heat',tf.sigmoid(heads['part_pred']))
-    tf.summary.image('structure_hat',structure_hat)
-
-    merged_summaries = tf.summary.merge_all()
+    inter_sum.append(tf.summary.image('train_im',batch[Batch.inputs]))
+    for i in range(cfg.num_joints):
+        inter_sum.append(tf.summary.image('pred_joint_%d'%i,tf.expand_dims(tf.sigmoid(heads['part_pred'])[:,:,:,i],-1)))
 
     saver = tf.train.Saver()
     variables_to_restore_backbone = slim.get_variables_to_restore(include=["resnet_v1"])
     restorer_backbone = tf.train.Saver(variables_to_restore_backbone)
 
     sess = tf.Session()
-    sess = tf_debug.LocalCLIDebugWrapperSession(sess)
+    # sess = tf_debug.LocalCLIDebugWrapperSession(sess)
 
     coord, thread = start_preloading(sess, enqueue_op, dataset, placeholders)
 
@@ -151,10 +151,10 @@ def train():
 
     train_op_inter = get_optimizer(total_loss_inter, cfg)
     train_op_G = get_optimizer(loss_G,cfg,'G')
-    extra_update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
-    with tf.control_dependencies(extra_update_ops):
-        train_op_D = get_optimizer(loss_D,cfg,'D')
-    train_op_recon = get_optimizer(loss_recon,cfg,'recon')
+    # extra_update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
+    # with tf.control_dependencies(extra_update_ops):
+    #     train_op_D = get_optimizer(loss_D,cfg,'D')
+    train_op_D = get_optimizer(loss_D,cfg,'D')
 
     sess.run(tf.global_variables_initializer())
     sess.run(tf.local_variables_initializer())
@@ -176,31 +176,53 @@ def train():
     cum_loss_inter = 0.0
     cum_loss_G = 0.0
     cum_loss_D = 0.0
-    cum_loss_recon = 0.0
+
     for it in range(counter,max_iter+1):
 
-        [_, _, _,_,
-        loss_val_inter, loss_val_G, loss_val_D,loss_val_recon,
-         summary] = sess.run([train_op_inter,train_op_G,train_op_D,train_op_recon,
-                            total_loss_inter,loss_G,loss_D,loss_recon,
-                             merged_summaries])
+        if it == counter:
+            _,loss_val_D = sess.run([train_op_D,loss_D],
+                            feed_dict = {lamda_fake: cfg.weight_fake_init})
+            _,loss_val_inter,summary = sess.run([train_op_inter, total_loss_inter,inter_sum])
+            train_writer.add_summary(summary, it)
+            _,summary,\
+                loss_val_D,loss_val_D_real,loss_val_D_fake,lamda_fake_val = sess.run([train_op_D,D_sum,
+                            loss_D,loss_D_real,loss_D_fake,lamda_fake],
+                            feed_dict = {lamda_fake: cfg.weight_fake_init})
+            train_writer.add_summary(summary, it)
+            _,loss_val_G,summary = sess.run([train_op_G,loss_G,G_sum])
+            train_writer.add_summary(summary, it)
+        else:
+            _,loss_val_D = sess.run([train_op_D,loss_D],
+                            feed_dict = {lamda_fake: sess.run(lamda)})
+            _,loss_val_inter,summary = sess.run([train_op_inter, total_loss_inter,inter_sum])
+            train_writer.add_summary(summary, it)
+            _,summary,\
+            loss_val_D,loss_val_D_real,loss_val_D_fake,lamda_fake_val = sess.run([train_op_D,D_sum,
+                            loss_D,loss_D_real,loss_D_fake,lamda_fake],
+                            feed_dict = {lamda_fake: sess.run(lamda)})
+            train_writer.add_summary(summary, it)
+            _,loss_val_G,summary = sess.run([train_op_G,loss_G,G_sum])
+            train_writer.add_summary(summary, it)
+
+        lamda = lamda_fake_val + cfg.weight_update_fake*(cfg.weight_real_importance * loss_val_D_real - loss_val_D_fake)
+        lamda = 1.0 if lamda >1 else lamda
+        lamda = 0.0 if lamda <0 else lamda
+
         cum_loss_inter += loss_val_inter
         cum_loss_G += loss_val_G
         cum_loss_D += loss_val_D
-        cum_loss_recon += loss_val_recon
-        train_writer.add_summary(summary, it)
 
         if it % display_iters == 0:
             average_loss_inter = cum_loss_inter / display_iters
             average_loss_G = cum_loss_G / display_iters
             average_loss_D = cum_loss_D / display_iters
-            average_loss_recon = cum_loss_recon / display_iters
+
             cum_loss_inter = 0.0
             cum_loss_G = 0.0
             cum_loss_D = 0.0
-            cum_loss_recon = 0.0
-            print ("iteration:[%d], loss_inter: %.4f, loss_G: %.4f, loss_D: %.4f, loss_recon: %.4f"
-                % (it, average_loss_inter,average_loss_G,average_loss_D,average_loss_recon))
+
+            print ("iteration:[%d], loss_inter: %.4f, loss_G: %.4f, loss_D: %.4f"
+                % (it, average_loss_inter,average_loss_G,average_loss_D))
         # Save snapshot
         if (it % cfg.save_iters == 0 and it != 0) or it == max_iter:
             save_checkpoint(it,sess,saver,cfg)

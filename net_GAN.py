@@ -43,61 +43,125 @@ def _leaky_relu(x):
 
 class pose_gan(object):
 
-    class resblock(object):
-        def __init__(self,channel,name,ac_fn = tf.nn.relu,weight_decay=0.0005):
-            self.ac_fn = ac_fn
+    class stacked_hourglass():
+        def __init__(self, nb_stack, name='stacked_hourglass',num_joints = 14):
+            self.nb_stack = nb_stack
             self.name = name
-            self.weight_decay = weight_decay
-            self.ch = channel
-        def __call__(self,x):
-            with slim.arg_scope([slim.conv2d],padding = 'SAME',biases_initializer = tf.zeros_initializer(),
-                weights_initializer = tf.truncated_normal_initializer(stddev=0.01), activation_fn = self.ac_fn,
-                weights_regularizer = slim.l2_regularizer(self.weight_decay)):
+            self.num_joints = num_joints
 
-                out = slim.conv2d(x,self.ch,[3,3],scope = self.name + '_conv1')
-                out = slim.conv2d(out,self.ch,[3,3],scope = self.name + '_conv2')
-                out += x
-            return out
+        def __call__(self, inputs,heat,reuse = False,stride = 8):
+            heat = tf.image.resize_nearest_neighbor(heat,tf.shape(heat)[1:3]*stride)
+            x = tf.concat([inputs,heat],3)
 
-    # class batch_norm(object):
-    #     def __init__(self, epsilon=1e-5, momentum = 0.9, name="batch_norm"):
-    #         with tf.variable_scope(name):
-    #             self.epsilon  = epsilon
-    #             self.momentum = momentum
-    #             self.name = name
-    #
-    #      def __call__(self, x, train=True):
-    #         return tf.contrib.layers.batch_norm(x,
-    #                           decay=self.momentum,
-    #                           updates_collections=None,
-    #                           epsilon=self.epsilon,
-    #                           scale=True,
-    #                           is_training=train,
-    #                           scope=self.name)
+            with tf.variable_scope(self.name,reuse = reuse) as scope:
+                if reuse:
+                    scope.reuse_variables()
+                padding = tf.pad(x, [[0,0],[3,3],[3,3],[0,0]], name='padding')
+                with tf.variable_scope("preprocessing") as sc:
+                    conv1 = self._conv(padding, 64, 7, 2, 'VALID', 'conv1')
+                    norm1 = tf.contrib.layers.batch_norm(conv1, 0.9, epsilon=1e-5,
+                                        activation_fn=tf.nn.relu, scope=sc)
+                    r1 = self._residual_block(norm1, 128, 'r1')
+                    pool = tf.contrib.layers.max_pool2d(r1, [2,2], [2,2], 'VALID', scope=scope.name)
+                    r2 = self._residual_block(pool, 128, 'r2')
+                    pool_1 = tf.contrib.layers.max_pool2d(r2,[2,2],[2,2], 'VALID', scope=scope.name)
+                    r2_1 = self._residual_block(pool_1, 128, 'r2_1')
+                    r3 = self._residual_block(r2_1, 256, 'r3')
+                hg = [None] * self.nb_stack
+                ll = [None] * self.nb_stack
+                ll_ = [None] * self.nb_stack
+                out = [None] * self.nb_stack
+                out_ = [None] * self.nb_stack
+                sum_ = [None] * self.nb_stack
+                with tf.variable_scope('_hourglass_0_with_supervision') as sc:
+                    hg[0] = self._hourglass(r3, 4, 256, '_hourglass')
+                    ll[0] = self._conv_bn_relu(hg[0], 256, name='conv_1')
+                    ll_[0] = self._conv(ll[0],256,1,1,'VALID','ll')
+                    out[0] = self._conv(ll[0],self.num_joints,1,1,'VALID','out')
+                    out_[0] = self._conv(out[0],256,1,1,'VALID','out_')
+                    sum_[0] = tf.add_n([ll_[0], out_[0], r3])
+                for i in range(1, self.nb_stack - 1):
+                    with tf.variable_scope('_hourglass_' + str(i) + '_with_supervision') as sc:
+                        hg[i] = self._hourglass(sum_[i-1], 4, 256, '_hourglass')
+                        ll[i] = self._conv_bn_relu(hg[i], 256, name='conv_1')
+                        ll_[i] = self._conv(ll[i],256,1,1,'VALID','ll')
+                        out[i] = self._conv(ll[i],self.num_joints,1,1,'VALID','out')
+                        out_[i] = self._conv(out[i],256,1,1,'VALID','out_')
+                        sum_[i] = tf.add_n([ll_[i], out_[i], sum_[i-1]])
+                with tf.variable_scope('_hourglass_' + str(self.nb_stack - 1) + '_with_supervision') as sc:
+                    hg[self.nb_stack-1] = self._hourglass(sum_[self.nb_stack - 2], 4, 256, '_hourglass')
+                    ll[self.nb_stack-1] = self._conv_bn_relu(hg[self.nb_stack - 1], 256, name='conv_1')
+                    out[self.nb_stack-1] = self._conv(ll[self.nb_stack-1],self.num_joints,1,1,'VALID','out')
+                return tf.stack(out)
+
+        def _conv(self, inputs, nb_filter, kernel_size=1, strides=1, pad='VALID', name='conv'):
+            with tf.variable_scope(name) as scope:
+                kernel = tf.Variable(tf.contrib.layers.xavier_initializer(uniform=False)([kernel_size,\
+                                        kernel_size,inputs.get_shape().as_list()[3],nb_filter]), name='weights')
+                conv = tf.nn.conv2d(inputs, kernel, [1,strides,strides,1], padding=pad, data_format='NHWC')
+                return conv
+
+        def _conv_bn_relu(self, inputs, nb_filter, kernel_size=1, strides=1, name=None):
+             with tf.variable_scope(name) as scope:
+                kernel = tf.Variable(tf.contrib.layers.xavier_initializer(uniform=False)([kernel_size,\
+                                        kernel_size,inputs.get_shape().as_list()[3],nb_filter]), name='weights')
+                conv = tf.nn.conv2d(inputs, kernel, [1,strides,strides,1], padding='SAME', data_format='NHWC')
+                norm = tf.contrib.layers.batch_norm(conv, 0.9, epsilon=1e-5, activation_fn=tf.nn.relu, scope=scope.name)
+                return norm
+
+        def _conv_block(self, inputs, nb_filter_out, name='_conv_block'):
+            with tf.variable_scope(name) as scope:
+                with tf.variable_scope('norm_conv1') as sc:
+                    norm1 = tf.contrib.layers.batch_norm(inputs, 0.9, epsilon=1e-5,
+                                        activation_fn=tf.nn.relu, scope=sc)
+                    conv1 = self._conv(norm1, nb_filter_out / 2, 1, 1, 'SAME', name='conv1')
+                with tf.variable_scope('norm_conv2') as sc:
+                    norm2 = tf.contrib.layers.batch_norm(conv1, 0.9, epsilon=1e-5,
+                                        activation_fn=tf.nn.relu, scope=sc)
+                    conv2 = self._conv(norm2, nb_filter_out / 2, 3, 1, 'SAME', name='conv2')
+                with tf.variable_scope('norm_conv3') as sc:
+                    norm3 = tf.contrib.layers.batch_norm(conv2, 0.9, epsilon=1e-5,
+                                        activation_fn=tf.nn.relu, scope=sc)
+                    conv3 = self._conv(norm3, nb_filter_out, 1, 1, 'SAME', name='conv3')
+                return conv3
+
+        def _skip_layer(self, inputs, nb_filter_out, name='_skip_layer'):
+            if inputs.get_shape()[3].__eq__(tf.Dimension(nb_filter_out)):
+                return inputs
+            else:
+                with tf.variable_scope(name) as scope:
+                    conv = self._conv(inputs, nb_filter_out, 1, 1, 'SAME', name='conv')
+                    return conv
+
+        def _residual_block(self, inputs, nb_filter_out, name='_residual_block'):
+            with tf.variable_scope(name) as scope:
+                _conv_block = self._conv_block(inputs, nb_filter_out)
+                _skip_layer = self._skip_layer(inputs, nb_filter_out)
+                return tf.add(_skip_layer, _conv_block)
+
+        def _hourglass(self, inputs, n, nb_filter_res, name='_hourglass'):
+            with tf.variable_scope(name) as scope:
+                # Upper branch
+                up1 = self._residual_block(inputs, nb_filter_res, 'up1')
+                # Lower branch
+                pool = tf.contrib.layers.max_pool2d(inputs, [2,2], [2,2], 'VALID', scope=scope.name)
+                low1 = self._residual_block(pool, nb_filter_res, 'low1')
+                if n > 1:
+                    low2 = self._hourglass(low1, n-1, nb_filter_res, 'low2')
+                else:
+                    low2 = self._residual_block(low1, nb_filter_res, 'low2')
+                low3 = self._residual_block(low2, nb_filter_res, 'low3')
+                low4 = tf.image.resize_nearest_neighbor(low3, tf.shape(low3)[1:3] * 2,
+                                                        name='upsampling')
+                if n < 4:
+                    return tf.add(up1, low4, name='merge')
+                else:
+                    return self._residual_block(tf.add(up1, low4), nb_filter_res, 'low4')
+
 
     def __init__(self,cfg):
         self.cfg = cfg
-        #
-        # self.d_bn1 = batch_norm(name = 'd_bn1')
-        # self.d_bn2 = batch_norm(name = 'd_bn2')
-        # self.d_bn3 = batch_norm(name = 'd_bn3')
-        # self.d_bn4 = batch_norm(name = 'd_bn4')
-        # self.d_bn5 = batch_norm(name = 'd_bn5')
-        # self.d_bn6 = batch_norm(name = 'd_bn6')
-
-        self.g_e_res1 = self.resblock(64,'g_e_res1')
-        self.g_e_res2 = self.resblock(128,'g_e_res2')
-        self.g_e_res3 = self.resblock(256,'g_e_res3')
-        self.g_e_res4 = self.resblock(384,'g_e_res4')
-        self.g_e_res5 = self.resblock(512,'g_e_res5')
-        self.g_e_res6 = self.resblock(640,'g_e_res6')
-
-        self.g_d_res1 = self.resblock(640,'g_d_res1')
-        self.g_d_res2 = self.resblock(512,'g_d_res2')
-        self.g_d_res3 = self.resblock(384,'g_d_res3')
-        self.g_d_res4 = self.resblock(256,'g_d_res4')
-        self.g_d_res5 = self.resblock(128,'g_d_res5')
-        self.g_d_res6 = self.resblock(64,'g_d_res6')
+        self.discriminator = self.stacked_hourglass(4, 'stacked_hourglass',cfg.num_joints)
 
     def part_detection_loss(self, heads, batch, locref, intermediate):
         cfg = self.cfg
@@ -183,94 +247,23 @@ class pose_gan(object):
             outputs['locref'] = heads['locref']
         return outputs
 
-    def generator(self,inputs,heat, reuse = None):
-        inputs = tf.image.resize_images(inputs,(320,128))
-        heat = tf.image.resize_images(heat,(320,128))
-        x = tf.concat([inputs,heat],3)
-        with tf.variable_scope('generator',reuse = reuse) as net_scope:
-            if reuse:
-                net_scope.reuse_variables()
-            with slim.arg_scope([slim.conv2d,slim.fully_connected,slim.conv2d_transpose],
-                biases_initializer = tf.zeros_initializer(),
-                weights_initializer = tf.truncated_normal_initializer(stddev=0.01), activation_fn = None,
-                weights_regularizer = slim.l2_regularizer(0.0005)):
-                with slim.arg_scope([slim.conv2d,slim.conv2d_transpose], padding = 'SAME'):
-                    out_from_e_1 = self.g_e_res1(slim.conv2d(x,64,[3,3],scope= 'g_conv1'))
-                    out_from_e_2 = self.g_e_res2(slim.conv2d(out_from_e_1,128,[3,3],stride = 2,scope = 'g_conv2'))
-                    out_from_e_3 = self.g_e_res3(slim.conv2d(out_from_e_2,256,[3,3],stride = 2,scope = 'g_conv3'))
-                    out_from_e_4 = self.g_e_res4(slim.conv2d(out_from_e_3,384,[3,3],stride = 2,scope = 'g_conv4'))
-                    out_from_e_5 = self.g_e_res5(slim.conv2d(out_from_e_4,512,[3,3],stride = 2,scope = 'g_conv5'))
-                    out_from_e_6 = self.g_e_res6(slim.conv2d(out_from_e_5,640,[3,3],stride = 2,scope = 'g_conv6'))
-                    out_from_e =  slim.conv2d(out_from_e_6,640,[3,3],scope = 'g_conv7')
-
-                    out_from_e_ = slim.flatten(out_from_e)
-                    out_from_fc = slim.fully_connected(out_from_e_,64,scope = 'g_fc1')
-                    out_from_fc = slim.fully_connected(out_from_fc,int(out_from_e_.shape[1]),scope ='g_fc2')
-                    out_from_fc = tf.reshape(out_from_fc,tf.shape(out_from_e))
-
-                    out_from_d_1 = slim.conv2d_transpose(self.g_d_res1(out_from_fc+out_from_e_6),512,[3,3],stride=2,scope='g_dconv1')
-                    out_from_d_2 = slim.conv2d_transpose(self.g_d_res2(out_from_d_1+out_from_e_5),384,[3,3],stride=2,scope='g_dconv2')
-                    out_from_d_3 = slim.conv2d_transpose(self.g_d_res3(out_from_d_2+out_from_e_4),256,[3,3],stride=2,scope='g_dconv3')
-                    out_from_d_4 = slim.conv2d_transpose(self.g_d_res4(out_from_d_3+out_from_e_3),128,[3,3],stride=2,scope='g_dconv4')
-                    out_from_d_5 = slim.conv2d_transpose(self.g_d_res5(out_from_d_4+out_from_e_2),64,[3,3],stride=2,scope='g_dconv5')
-                    out_from_d_6 = slim.conv2d_transpose(self.g_d_res6(out_from_d_5+out_from_e_1),1,[3,3],scope='g_dconv6')
-
-                    # output = tf.nn.sigmoid(out_from_d_6)
-                    output = out_from_d_6
-                    return output
-
-
-    def discriminator(self,inputs,structure,reuse = None):
-        inputs = tf.image.resize_images(inputs,(320,128))
-        structure = tf.image.resize_images(structure,(320,128))
-        x = tf.concat([inputs,structure],3)
-        ndf = 64
-        with tf.variable_scope('discriminator',reuse = reuse) as net_scope:
-            if reuse:
-                net_scope.reuse_variables()
-            with slim.arg_scope([slim.conv2d,slim.fully_connected],
-                weights_initializer = tf.truncated_normal_initializer(stddev=0.01), activation_fn = _leaky_relu,
-                weights_regularizer = slim.l2_regularizer(0.0005),
-                biases_initializer = tf.zeros_initializer()):
-                with slim.arg_scope([slim.conv2d], padding = 'SAME',normalizer_fn = slim.batch_norm,
-                normalizer_params={'is_training':True,'decay':0.5}):
-                    out = slim.conv2d(x,ndf,[4,4],stride = 2,scope = 'd_conv1')
-                    out = slim.conv2d(out,ndf*2,[4,4],stride = 2,scope = 'd_conv2')
-                    out = slim.conv2d(out,ndf*4,[4,4],stride = 2,scope ='d_conv3')
-                    out = slim.conv2d(out,ndf*8,[4,4],stride = 2,scope ='d_conv4')
-                    out = slim.conv2d(out,ndf*16,[4,4],stride = 2,scope ='d_conv5')
-
-                    out = slim.flatten(out)
-                    logits = slim.fully_connected(out,1,activation_fn = None,scope = 'd_fc')
-
-                    return logits,tf.nn.sigmoid(logits)
-
 
     def train(self,batch):
         cfg = self.cfg
+
         intermediate = cfg.intermediate_supervision
         locref = cfg.location_refinement
         heads = self.get_net(batch[Batch.inputs])
         loss_inter = self.part_detection_loss(heads, batch, locref, intermediate)
 
-
         # get adversarial losses and reconstruction loss
-        # structure_hat = self.generator(batch[Batch.inputs],heads['part_pred'])
-        structure_hat = self.generator(batch[Batch.inputs],batch[Batch.part_score_targets])
+        recon = self.discriminator(batch[Batch.inputs],batch[Batch.part_score_targets],stride = int(cfg.stride))
+        recon_hat = self.discriminator(batch[Batch.inputs],heads['part_pred'],reuse = True,stride = int(cfg.stride))
+        target_heat = tf.stack([batch[Batch.part_score_targets],batch[Batch.part_score_targets],
+                    batch[Batch.part_score_targets],batch[Batch.part_score_targets]])
+        target_heat_hat = tf.stack([heads['part_pred'],heads['part_pred'],heads['part_pred'],heads['part_pred']])
+        loss_D_real = tf.reduce_mean(tf.losses.mean_squared_error(predictions = recon, labels = target_heat))
+        loss_D_fake = tf.reduce_mean(tf.losses.mean_squared_error(predictions = recon_hat, labels = target_heat_hat))
+        loss_G = tf.reduce_mean(tf.losses.mean_squared_error(predictions = recon_hat, labels = target_heat_hat))
 
-        d_real_logits,d_real = self.discriminator(batch[Batch.inputs],batch[Batch.pose_target])
-        d_fake_logits,d_fake = self.discriminator(batch[Batch.inputs],structure_hat,reuse = True)
-        loss_G = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(
-            logits = d_fake_logits, labels = tf.ones_like(d_fake)))
-        loss_D = (tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(
-            logits = d_fake_logits, labels = tf.zeros_like(d_fake))) + \
-            tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(
-            logits = d_real_logits, labels = tf.ones_like(d_real))) ) * 0.5
-
-        # loss_rec = losses.huber_los(tf.image.resize_images(batch[Batch.pose_target],(320,128)),
-        #             tf.image.resize_images(structure_hat,(320,128)))
-        # loss_rec = tf.losses.absolute_difference(tf.image.resize_images(batch[Batch.pose_target],(320,128)),
-        #                 tf.image.resize_images(structure_hat,(320,128)))
-        loss_rec = tf.losses.mean_squared_error(tf.image.resize_images(batch[Batch.pose_target],(320,128)),
-                        tf.image.resize_images(structure_hat,(320,128)))
-        return loss_inter, loss_G, loss_D , loss_rec, heads, d_real, d_fake,structure_hat
+        return loss_inter, loss_G, loss_D_real, loss_D_fake, heads

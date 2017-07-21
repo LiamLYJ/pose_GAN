@@ -25,11 +25,12 @@ tf.app.flags.DEFINE_string(
     'save log dir'
 )
 tf.app.flags.DEFINE_float(
-    'global_scale', 0.8452830189,
+    # 'global_scale', 0.8452830189,
+    'global_scale', 1.0,
     'the global_scale wrt origial image'
 )
 tf.app.flags.DEFINE_bool(
-    'location_refinement', False,
+    'location_refinement', True,
     'use location_refinement or not'
 )
 tf.app.flags.DEFINE_float(
@@ -96,14 +97,14 @@ tf.app.flags.DEFINE_integer(
     'pos_dist_thresh', 17,
     'threshold in computing the gt'
 )
-tf.app.flags.DEFINE_float(
-    'scale_jitter_lo', 0.85,
-    'scale_jitter_lo'
-)
-tf.app.flags.DEFINE_float(
-    'scale_jitter_up', 1.15,
-    'scale_jitter_up'
-)
+# tf.app.flags.DEFINE_float(
+#     'scale_jitter_lo', 0.85,
+#     'scale_jitter_lo'
+# )
+# tf.app.flags.DEFINE_float(
+#     'scale_jitter_up', 1.15,
+#     'scale_jitter_up'
+# )
 tf.app.flags.DEFINE_string(
     'net_type', 'resnet_101',
     'resnet_101 or resnet_50'
@@ -125,7 +126,7 @@ tf.app.flags.DEFINE_integer(
     'how frequency need to save model'
 )
 tf.app.flags.DEFINE_float(
-    'learning_rate_inter', 0.000001,
+    'learning_rate_inter', 0.0002,
     'learning rate for inter'
 )
 tf.app.flags.DEFINE_float(
@@ -144,19 +145,27 @@ tf.app.flags.DEFINE_bool(
     'weigh_only_present_joints', False,
     'if only weight the present joints'
 )
-tf.app.flags.DEFINE_integer(
-    'width_structure', 5,
-    'width of the structure'
+tf.app.flags.DEFINE_float(
+    'weight_inter', 1.0,
+    'loss weight for inter in pose estimation net'
 )
 tf.app.flags.DEFINE_float(
-    'weight_inter', 0,
-    'loss weight for inter'
+    'weight_G', 1.0,
+    'loss weight for generator in pose estimation net'
 )
 tf.app.flags.DEFINE_float(
-    'weight_G', 1,
-    'loss weight for generator'
-)
-tf.app.flags.DEFINE_float(
-    'weight_D', 1,
+    'weight_D', 0.5,
     'loss weight for discriminator'
+)
+tf.app.flags.DEFINE_float(
+    'weight_fake_init', 0.1,
+    'intial update weight for lamda_fake in discriminator'
+)
+tf.app.flags.DEFINE_float(
+    'weight_update_fake', 1.0,
+    'weight_update_fake for lamda_fake in discriminator'
+)
+tf.app.flags.DEFINE_float(
+    'weight_real_importance', 1.0,
+    'how much is the real loss importance in discriminator'
 )
