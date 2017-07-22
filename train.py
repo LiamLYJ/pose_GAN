@@ -118,8 +118,8 @@ def train():
     lamda_fake = tf.where(tf.less(lamda_fake,0.0),0.0, lamda_fake)
     loss_D = loss_D_real - lamda_fake * loss_D_fake
     total_loss_inter = cfg.weight_inter * total_loss_inter
-    loss_G = cfg.weight_G * _loss_G
-    loss_D = cfg.weight_D * _loss_D
+    loss_G = cfg.weight_G * loss_G
+    loss_D = cfg.weight_D * loss_D
 
     G_sum = []
     D_sum = []
@@ -137,6 +137,10 @@ def train():
     inter_sum.append(tf.summary.image('train_im',batch[Batch.inputs]))
     for i in range(cfg.num_joints):
         inter_sum.append(tf.summary.image('pred_joint_%d'%i,tf.expand_dims(tf.sigmoid(heads['part_pred'])[:,:,:,i],-1)))
+
+    G_sums = tf.summary.merge(G_sum)
+    D_sums = tf.summary.merge(D_sum)
+    inter_sums = tf.summary.merge(inter_sum)
 
     saver = tf.train.Saver()
     variables_to_restore_backbone = slim.get_variables_to_restore(include=["resnet_v1"])
@@ -182,26 +186,26 @@ def train():
         if it == counter:
             _,loss_val_D = sess.run([train_op_D,loss_D],
                             feed_dict = {_lamda_fake: cfg.weight_fake_init})
-            _,loss_val_inter,summary = sess.run([train_op_inter, total_loss_inter,inter_sum])
+            _,loss_val_inter,summary = sess.run([train_op_inter, total_loss_inter,inter_sums])
             train_writer.add_summary(summary, it)
             _,summary,\
-                loss_val_D,loss_val_D_real,loss_val_D_fake,lamda_fake_val = sess.run([train_op_D,D_sum,
+                loss_val_D,loss_val_D_real,loss_val_D_fake,lamda_fake_val = sess.run([train_op_D,D_sums,
                             loss_D,loss_D_real,loss_D_fake,lamda_fake],
                             feed_dict = {_lamda_fake: cfg.weight_fake_init})
             train_writer.add_summary(summary, it)
-            _,loss_val_G,summary = sess.run([train_op_G,loss_G,G_sum])
+            _,loss_val_G,summary = sess.run([train_op_G,loss_G,G_sums])
             train_writer.add_summary(summary, it)
         else:
             _,loss_val_D = sess.run([train_op_D,loss_D],
-                            feed_dict = {_lamda_fake: sess.run(lamda)})
-            _,loss_val_inter,summary = sess.run([train_op_inter, total_loss_inter,inter_sum])
+                            feed_dict = {_lamda_fake: lamda})
+            _,loss_val_inter,summary = sess.run([train_op_inter, total_loss_inter,inter_sums])
             train_writer.add_summary(summary, it)
             _,summary,\
-            loss_val_D,loss_val_D_real,loss_val_D_fake,lamda_fake_val = sess.run([train_op_D,D_sum,
+            loss_val_D,loss_val_D_real,loss_val_D_fake,lamda_fake_val = sess.run([train_op_D,D_sums,
                             loss_D,loss_D_real,loss_D_fake,lamda_fake],
-                            feed_dict = {_lamda_fake: sess.run(lamda)})
+                            feed_dict = {_lamda_fake: lamda})
             train_writer.add_summary(summary, it)
-            _,loss_val_G,summary = sess.run([train_op_G,loss_G,G_sum])
+            _,loss_val_G,summary = sess.run([train_op_G,loss_G,G_sums])
             train_writer.add_summary(summary, it)
 
         lamda = lamda_fake_val + cfg.weight_update_fake*(cfg.weight_real_importance * loss_val_D_real - loss_val_D_fake)
