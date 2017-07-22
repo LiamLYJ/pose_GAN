@@ -109,17 +109,17 @@ def train():
     batch_spec = get_batch_spec(cfg)
     batch, enqueue_op, placeholders = setup_preloading(batch_spec)
 
-    lamda_fake = tf.placeholder(tf.float32,shape =[])
+    _lamda_fake = tf.placeholder(tf.float32,shape =[])
     pose_Gan = pose_gan(cfg)
     losses_inter,loss_G,loss_D_real,loss_D_fake,heads= pose_Gan.train(batch)
     total_loss_inter = losses_inter['total_loss']
-    lamda_fake = lamda_fake + cfg.weight_update_fake*(cfg.weight_real_importance * loss_D_real - loss_D_fake)
+    lamda_fake = _lamda_fake + cfg.weight_update_fake*(cfg.weight_real_importance * loss_D_real - loss_D_fake)
     lamda_fake = tf.where(tf.greater(lamda_fake,1.0),1.0, lamda_fake)
     lamda_fake = tf.where(tf.less(lamda_fake,0.0),0.0, lamda_fake)
     loss_D = loss_D_real - lamda_fake * loss_D_fake
-    # total_loss_inter = cfg.weight_inter * total_loss_inter
-    # loss_G = cfg.weight_G * _loss_G
-    # loss_D = cfg.weight_D * _loss_D
+    total_loss_inter = cfg.weight_inter * total_loss_inter
+    loss_G = cfg.weight_G * _loss_G
+    loss_D = cfg.weight_D * _loss_D
 
     G_sum = []
     D_sum = []
@@ -181,25 +181,25 @@ def train():
 
         if it == counter:
             _,loss_val_D = sess.run([train_op_D,loss_D],
-                            feed_dict = {lamda_fake: cfg.weight_fake_init})
+                            feed_dict = {_lamda_fake: cfg.weight_fake_init})
             _,loss_val_inter,summary = sess.run([train_op_inter, total_loss_inter,inter_sum])
             train_writer.add_summary(summary, it)
             _,summary,\
                 loss_val_D,loss_val_D_real,loss_val_D_fake,lamda_fake_val = sess.run([train_op_D,D_sum,
                             loss_D,loss_D_real,loss_D_fake,lamda_fake],
-                            feed_dict = {lamda_fake: cfg.weight_fake_init})
+                            feed_dict = {_lamda_fake: cfg.weight_fake_init})
             train_writer.add_summary(summary, it)
             _,loss_val_G,summary = sess.run([train_op_G,loss_G,G_sum])
             train_writer.add_summary(summary, it)
         else:
             _,loss_val_D = sess.run([train_op_D,loss_D],
-                            feed_dict = {lamda_fake: sess.run(lamda)})
+                            feed_dict = {_lamda_fake: sess.run(lamda)})
             _,loss_val_inter,summary = sess.run([train_op_inter, total_loss_inter,inter_sum])
             train_writer.add_summary(summary, it)
             _,summary,\
             loss_val_D,loss_val_D_real,loss_val_D_fake,lamda_fake_val = sess.run([train_op_D,D_sum,
                             loss_D,loss_D_real,loss_D_fake,lamda_fake],
-                            feed_dict = {lamda_fake: sess.run(lamda)})
+                            feed_dict = {_lamda_fake: sess.run(lamda)})
             train_writer.add_summary(summary, it)
             _,loss_val_G,summary = sess.run([train_op_G,loss_G,G_sum])
             train_writer.add_summary(summary, it)
