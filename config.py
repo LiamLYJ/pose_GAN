@@ -154,18 +154,18 @@ tf.app.flags.DEFINE_float(
     'loss weight for generator in pose estimation net'
 )
 tf.app.flags.DEFINE_float(
-    'weight_D', 0.5,
+    'weight_D', 1.0,
     'loss weight for discriminator'
 )
 tf.app.flags.DEFINE_float(
-    'weight_fake_init', 0.1,
+    'weight_fake_init', 0.15,
     'intial update weight for lamda_fake in discriminator'
 )
 tf.app.flags.DEFINE_float(
-    'weight_update_fake', 1.0,
+    'weight_update_fake', 10.0,
     'weight_update_fake for lamda_fake in discriminator'
 )
 tf.app.flags.DEFINE_float(
-    'weight_real_importance', 1.0,
+    'weight_real_importance', 4.0,
     'how much is the real loss importance in discriminator'
 )

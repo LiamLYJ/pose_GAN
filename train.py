@@ -138,6 +138,9 @@ def train():
     for i in range(cfg.num_joints):
         inter_sum.append(tf.summary.image('pred_joint_%d'%i,tf.expand_dims(tf.sigmoid(heads['part_pred'])[:,:,:,i],-1)))
 
+    # check_heat = tf.expand_dims(batch[Batch.part_score_targets][:,:,:,0],-1)
+    # inter_sum.append(tf.summary.image('check_heat',check_heat))
+
     G_sums = tf.summary.merge(G_sum)
     D_sums = tf.summary.merge(D_sum)
     inter_sums = tf.summary.merge(inter_sum)
@@ -180,6 +183,8 @@ def train():
     cum_loss_inter = 0.0
     cum_loss_G = 0.0
     cum_loss_D = 0.0
+    cum_loss_D_real = 0.0
+    cum_loss_D_fake = 0.0
 
     for it in range(counter,max_iter+1):
 
@@ -215,20 +220,26 @@ def train():
         cum_loss_inter += loss_val_inter
         cum_loss_G += loss_val_G
         cum_loss_D += loss_val_D
+        cum_loss_D_real += loss_val_D_real
+        cum_loss_D_fake += loss_val_D_fake
 
         if it % display_iters == 0:
             average_loss_inter = cum_loss_inter / display_iters
             average_loss_G = cum_loss_G / display_iters
             average_loss_D = cum_loss_D / display_iters
+            average_loss_D_real = cum_loss_D_real / display_iters
+            average_loss_D_fake = cum_loss_D_fake / display_iters
 
             cum_loss_inter = 0.0
             cum_loss_G = 0.0
             cum_loss_D = 0.0
+            cum_loss_D_fake = 0.0
+            cum_loss_D_real = 0.0
 
-            print ("iteration:[%d], loss_inter: %.4f, loss_G: %.4f, loss_D: %.4f"
-                % (it, average_loss_inter,average_loss_G,average_loss_D))
+            print ("iteration:[%d], loss_inter: %.4f, loss_G: %.5f, loss_D: %.6f, loss_D_real: %.8f,loss_D_fake: %.8f"
+                % (it, average_loss_inter,average_loss_G,average_loss_D,average_loss_D_real,average_loss_D_fake))
         # Save snapshot
-        if (it % cfg.save_iters == 0 and it != 0) or it == max_iter:
+        if (it % cfg.save_iters == 0 and it != 0 and it != counter) or it == max_iter:
             save_checkpoint(it,sess,saver,cfg)
             print ('saved model with iteration[%d]'%it)
 
