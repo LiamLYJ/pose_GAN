@@ -13,15 +13,15 @@ tf.app.flags.DEFINE_bool(
     'shuffle the data or not'
 )
 tf.app.flags.DEFINE_string(
-    'snapshot_prefix', 'snapshot',
+    'snapshot_prefix', 'redundent',
     'the snapshot prefix'
 )
 tf.app.flags.DEFINE_string(
-    'save_path', './trained_model/',
+    'save_path', './trained_model_redundent/',
     'where to save the trained_model'
 )
 tf.app.flags.DEFINE_string(
-    'log_dir', './log',
+    'log_dir', './log_redundent',
     'save log dir'
 )
 tf.app.flags.DEFINE_float(
@@ -49,8 +49,12 @@ tf.app.flags.DEFINE_string(
     'which optimizer'
 )
 tf.app.flags.DEFINE_bool(
-    'intermediate_supervision', True,
+    'intermediate_supervision', False,
     'if use intermediate_supervision in Resnet'
+)
+tf.app.flags.DEFINE_bool(
+    'redundent', True,
+    'if use redundent structure '
 )
 tf.app.flags.DEFINE_integer(
     'intermediate_supervision_layer', 12,
@@ -77,7 +81,7 @@ tf.app.flags.DEFINE_integer(
     'crop_pad'
 )
 tf.app.flags.DEFINE_string(
-    'dataset', '/home/hpc/ssd/lyj/liu_data/dataset.mat',
+    'dataset', './dataset.mat',
     'dataset name'
 )
 tf.app.flags.DEFINE_string(
@@ -132,16 +136,3 @@ tf.app.flags.DEFINE_bool(
     'weigh_only_present_joints', False,
     'if only weight the present joints'
 )
-# cfg.weigh_negatives = False
-# cfg.fg_fraction = 0.25
-# cfg.scoremap_dir = "test"
-# cfg.use_gt_segm = False
-# cfg.video = False
-# cfg.video_batch = False
-# cfg.sparse_graph = []
-# cfg.pairwise_stats_collect = False
-# cfg.pairwise_stats_fn = "pairwise_stats.mat"
-# cfg.pairwise_predict = False
-# cfg.pairwise_huber_loss = True
-# cfg.pairwise_loss_weight = 1.0
-# cfg.tensorflow_pairwise_order = True

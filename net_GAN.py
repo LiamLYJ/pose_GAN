@@ -11,6 +11,32 @@ mean_pixel = [123.68, 116.779, 103.939]
 net_funcs = {'resnet_50': resnet_v1.resnet_v1_50,
              'resnet_101': resnet_v1.resnet_v1_101}
 
+_networks_map = {
+    'resnet101': {'C1':'resnet_v1_101/conv1/Relu:0',
+               'C2':'resnet_v1_101/block1/unit_2/bottleneck_v1',
+               'C3':'resnet_v1_101/block2/unit_3/bottleneck_v1',
+               'C4':'resnet_v1_101/block3/unit_5/bottleneck_v1',
+               'C5':'resnet_v1_101/block4/unit_3/bottleneck_v1',
+               }
+  }
+
+def _extra_conv_arg_scope(weight_decay=0.00001, activation_fn=None, normalizer_fn=None):
+
+  with slim.arg_scope(
+      [slim.conv2d, slim.conv2d_transpose],
+      padding='SAME',
+      weights_regularizer=slim.l2_regularizer(weight_decay),
+      weights_initializer=tf.truncated_normal_initializer(stddev=0.001),
+      activation_fn=activation_fn,
+      normalizer_fn=normalizer_fn,) as arg_sc:
+    with slim.arg_scope(
+      [slim.fully_connected],
+          weights_regularizer=slim.l2_regularizer(weight_decay),
+          weights_initializer=tf.truncated_normal_initializer(stddev=0.001),
+          activation_fn=activation_fn,
+          normalizer_fn=normalizer_fn) as arg_sc:
+          return arg_sc
+
 def get_batch_spec(cfg):
     num_joints = cfg.num_joints
     batch_size = cfg.batch_size
@@ -57,7 +83,10 @@ class pose_gan(object):
         if intermediate:
             loss['part_loss_interm'] = add_part_loss('part_pred_interm')
             total_loss = total_loss + loss['part_loss_interm']
-
+        if cfg.redundent:
+            for c in range(4,2,-1):
+                loss['redundent_loss_R%d'%c] = add_part_loss('R%d'%c)
+                total_loss = total_loss + loss['redundent_loss_R%d'%c]
         if locref:
             locref_pred = heads['locref']
             locref_targets = batch[Batch.locref_targets]
@@ -82,9 +111,30 @@ class pose_gan(object):
         with slim.arg_scope(resnet_v1.resnet_arg_scope(False)):
             net, end_points = net_fun(im_centered,
                                       global_pool=False, output_stride=16)
+            if  not self.cfg.redundent:
+                return net, end_points
+            else:
+                return self.build_redundent(net,end_points)
 
-        return net, end_points
-
+    def build_redundent(self,net,end_points):
+        arg_scope = _extra_conv_arg_scope()
+        redundent_end_points = {}
+        redundent_map = _networks_map['resnet101']
+        with tf.variable_scope('redundent'):
+            with slim.arg_scope(arg_scope):
+                for c in range(5,2,-1):
+                    s,s_ = end_points[redundent_map['C%d'%c]], end_points[redundent_map['C%d'%(c-1)]]
+                    up_shape = tf.shape(s_)
+                    s = slim.conv2d(s,256,[1,1],stride = 1, scope = 'C%d_uplayer'%c)
+                    s = tf.image.resize_bilinear(s,[up_shape[1],up_shape[2]], name ='C%d/upscale'%c)
+                    s_ = slim.conv2d(s_,256,[1,1],stride = 1,scope = 'C%d_downlayer'%c)
+                    s = tf.add(s,s_, name ='C%d/additon_together'%c)
+                    s = slim.conv2d(s,256,[3,3],stride = 1,scope = 'C%d/redundent'%c)
+                    for k in range(5-c):
+                        s = slim.conv2d(s,256,[3,3],stride = 2,scope = 'C%d_%d/downscale'%(c,k))
+                    redundent_end_points['R%d'%c] = s
+        features = redundent_end_points['R5']
+        return features,redundent_end_points
 
     def prediction_layers(self,features,end_points,reuse=None, no_interm=False, scope='pose'):
         cfg = self.cfg
@@ -106,6 +156,12 @@ class pose_gan(object):
                 out['part_pred_interm'] = prediction_layer(cfg, block_interm_out,
                                                            'intermediate_supervision',
                                                            cfg.num_joints)
+            if cfg.redundent:
+                for c in range(4,2,-1):
+                    block_interm_out = end_points['R%d'%c]
+                    out['R%d'%c] = prediction_layer(cfg, block_interm_out,
+                                                    'redundent_loss_R%d'%c,
+                                                    cfg.num_joints)
         return out
 
 
