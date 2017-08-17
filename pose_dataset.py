@@ -94,8 +94,10 @@ class PoseDataset:
         self.has_gt = has_gt
         return data
 
+
     def num_keypoints(self):
         return self.cfg.num_joints
+
 
     def set_test_mode(self, test_mode):
         self.has_gt = not test_mode
@@ -143,20 +145,26 @@ class PoseDataset:
 
 
     def next_training_sample(self):
+        batch_size = self.cfg.batch_size
+
         if self.curr_img == 0 and self.shuffle:
             self.shuffle_images()
 
         curr_img = self.curr_img
-        self.curr_img = (self.curr_img + 1) % self.num_training_samples()
-
-        imidx = self.image_indices[curr_img]
-        mirror = self.cfg.mirror and self.mirrored[curr_img]
-
+        self.curr_img = (self.curr_img + batch_size) % self.num_training_samples()
+        imidx = self.image_indices[curr_img: curr_img + batch_size]
+        if self.cfg.mirror:
+            mirror = self.mirrored[curr_img: curr_img + batch_size]
+        else:
+            mirror = [False]*batch_size
         return imidx, mirror
 
 
     def get_training_sample(self, imidx):
-        return self.data[imidx]
+        output = []
+        for i in imidx:
+            output.append(self.data[i])
+        return output
 
 
     def get_scale(self):
@@ -171,13 +179,13 @@ class PoseDataset:
     def next_batch(self):
         while True:
             imidx, mirror = self.next_training_sample()
-            data_item = self.get_training_sample(imidx)
+            data_items = self.get_training_sample(imidx)
             scale = self.get_scale()
 
-            if not self.is_valid_size(data_item.im_size, scale):
+            if not all([self.is_valid_size(each_item.im_size,scale) for each_item in data_items]):
                 continue
 
-            return self.make_batch(data_item, scale, mirror)
+            return self.make_batch(data_items, scale, mirror)
 
 
     def is_valid_size(self, image_size, scale):
@@ -198,47 +206,60 @@ class PoseDataset:
         return True
 
 
-    def make_batch(self, data_item, scale, mirror):
-        im_file = data_item.im_path
-        logging.debug('image %s', im_file)
-        logging.debug('mirror %r', mirror)
-        image = imread(im_file, mode='RGB')
+    def make_batch(self, data_items, scale, mirror):
+        batch_size = self.cfg.batch_size
+        input_size = self.cfg.input_size
+        num_joints = self.cfg.num_joints
+        stride = self.cfg.stride
+        output_size = int(input_size / stride)
+        batch = {}
+        batch[Batch.inputs] = np.zeros([batch_size,input_size,input_size,3])
+        batch[Batch.part_score_targets] = np.zeros([batch_size,output_size,output_size,num_joints])
+        batch[Batch.part_score_weights] = np.zeros([batch_size,output_size,output_size,num_joints])
+        if self.cfg.location_refinement:
+            batch[Batch.locref_targets] = np.zeros([batch_size,output_size,output_size,num_joints*2])
+            batch[Batch.locref_mask] = np.zeros([batch_size,output_size,output_size,num_joints*2])
+        for count in range(self.cfg.batch_size):
+            im_file = data_items[count].im_path
+            logging.debug('image %s', im_file)
+            logging.debug('mirror %r', mirror)
+            image = imread(im_file, mode='RGB')
 
-        if self.has_gt:
-            joints = np.copy(data_item.joints)
-
-        if self.cfg.crop:
-            crop = data_item.crop
-            image = image[crop[1]:crop[3] + 1, crop[0]:crop[2] + 1, :]
             if self.has_gt:
-                joints[:, 1:3] -= crop[0:2].astype(joints.dtype)
+                joints = np.copy(data_items[count].joints)
 
-        img = imresize(image, scale) if scale != 1 else image
-        scaled_img_size = arr(img.shape[0:2])
+            if self.cfg.crop:
+                crop = data_items[count].crop
+                image = image[crop[1]:crop[3] + 1, crop[0]:crop[2] + 1, :]
+                if self.has_gt:
+                    joints[:, 1:3] -= crop[0:2].astype(joints.dtype)
 
-        if mirror:
-            img = np.fliplr(img)
+            img = imresize(image, scale) if scale != 1 else image
+            scaled_img_size = arr(img.shape[0:2])
 
-        batch = {Batch.inputs: img}
+            if mirror[count]:
+                img = np.fliplr(img)
 
-        if self.has_gt:
-            stride = self.cfg.stride
+            batch_tmp = {Batch.inputs: img}
 
-            if mirror:
-                joints = [self.mirror_joints(person_joints, self.symmetric_joints, image.shape[1]) for person_joints in
-                          joints]
+            if self.has_gt:
+                stride = self.cfg.stride
 
-            sm_size = np.ceil(scaled_img_size / (stride * 2)).astype(int) * 2
+                if mirror[count]:
+                    joints = [self.mirror_joints(person_joints, self.symmetric_joints, image.shape[1]) for person_joints in
+                              joints]
 
-            scaled_joints = [person_joints[:, 1:3] * scale for person_joints in joints]
+                sm_size = np.ceil(scaled_img_size / (stride * 2)).astype(int) * 2
 
-            joint_id = [person_joints[:, 0].astype(int) for person_joints in joints]
-            batch = self.compute_targets_and_weights(joint_id, scaled_joints, data_item, sm_size, scale, batch)
+                scaled_joints = [person_joints[:, 1:3] * scale for person_joints in joints]
 
+                joint_id = [person_joints[:, 0].astype(int) for person_joints in joints]
+                batch_tmp = self.compute_targets_and_weights(joint_id, scaled_joints, data_items[count], sm_size, scale, batch_tmp)
 
-        batch = {key: data_to_input(data) for (key, data) in batch.items()}
-
-        batch[Batch.data_item] = data_item
+            # batch = {key: data_to_input(data) for (key, data) in batch.items()}
+            for key,data in batch_tmp.items():
+                batch[key][count,:,:,:] = data
+        batch[Batch.data_item] = data_items
 
         return batch
 
