@@ -78,7 +78,8 @@ tf.app.flags.DEFINE_integer(
     'crop_pad'
 )
 tf.app.flags.DEFINE_string(
-    'dataset', '/home/hpc/ssd/lyj/liu_data/dataset.mat',
+    # 'dataset', '/home/hpc/ssd/lyj/liu_data/dataset_bg.mat',
+    'dataset', '/home/hpc/ssd/lyj/liu_data/train_.mat',
     'where to load dataset mat file'
 )
 tf.app.flags.DEFINE_string(
@@ -90,8 +91,12 @@ tf.app.flags.DEFINE_string(
     'dataset_type'
 )
 tf.app.flags.DEFINE_integer(
-    'batch_size', 1,
+    'batch_size', 8,
     'batch size'
+)
+tf.app.flags.DEFINE_integer(
+    'input_size', 256,
+    'input image size '
 )
 tf.app.flags.DEFINE_integer(
     'pos_dist_thresh', 17,
@@ -122,7 +127,7 @@ tf.app.flags.DEFINE_integer(
     'how frequency need to display'
 )
 tf.app.flags.DEFINE_integer(
-    'save_iters', 10000,
+    'save_iters', 5000,
     'how frequency need to save model'
 )
 tf.app.flags.DEFINE_float(
@@ -150,11 +155,11 @@ tf.app.flags.DEFINE_float(
     'loss weight for inter in pose estimation net'
 )
 tf.app.flags.DEFINE_float(
-    'weight_G', 1.0,
+    'weight_G', 0.0,
     'loss weight for generator in pose estimation net'
 )
 tf.app.flags.DEFINE_float(
-    'weight_D', 1.0,
+    'weight_D', 0.0,
     'loss weight for discriminator'
 )
 tf.app.flags.DEFINE_float(
