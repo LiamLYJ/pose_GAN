@@ -85,7 +85,11 @@ class pose_gan(object):
             total_loss = total_loss + loss['part_loss_interm']
         if cfg.redundent:
             for c in range(4,2,-1):
-                loss['redundent_loss_R%d'%c] = add_part_loss('R%d'%c)
+                if c == 4:
+                    weight_redundent = 0.5
+                if c == 3:
+                    weight_redundent = 0.3
+                loss['redundent_loss_R%d'%c] = weight_redundent * add_part_loss('R%d'%c)
                 total_loss = total_loss + loss['redundent_loss_R%d'%c]
         if locref:
             locref_pred = heads['locref']
