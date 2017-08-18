@@ -59,6 +59,37 @@ def get_optimizer(loss_op, cfg):
     return  train_op
 
 
+def save_checkpoint(step,sess,saver,cfg):
+    model_name = cfg.snapshot_prefix
+    model_dir = cfg.dataset_name
+    checkpoint_dir = cfg.checkpoint_dir
+    checkpoint_dir = os.path.join(checkpoint_dir, model_dir)
+
+    if not os.path.exists(checkpoint_dir):
+        os.makedirs(checkpoint_dir)
+
+    saver.save(sess,os.path.join(checkpoint_dir, model_name),global_step=step)
+
+
+def load_checkpoint(sess,saver,cfg):
+    import re
+    print(" [*] Reading checkpoint...")
+    model_dir = cfg.dataset_name
+    checkpoint_dir = cfg.checkpoint_dir
+    checkpoint_dir = os.path.join(checkpoint_dir, model_dir)
+
+    ckpt = tf.train.get_checkpoint_state(checkpoint_dir)
+    if ckpt and ckpt.model_checkpoint_path:
+        ckpt_name = os.path.basename(ckpt.model_checkpoint_path)
+        saver.restore(sess, os.path.join(checkpoint_dir, ckpt_name))
+        counter = int(next(re.finditer("(\d+)(?!.*\d)",ckpt_name)).group(0))
+        print(" [*] Success to read {}".format(ckpt_name))
+        return True, counter
+    else:
+        print(" [*] Failed to find a checkpoint")
+        return False, 0
+
+
 def train():
 
     dataset = create_dataset(cfg)
@@ -79,11 +110,10 @@ def train():
 
     merged_summaries = tf.summary.merge_all()
 
-    global_step = slim.create_global_step()
+    variables_to_restore_backbone = slim.get_variables_to_restore(include=["resnet_v1"])
+    restorer_backbone = tf.train.Saver(variables_to_restore_backbone)
 
-    variables_to_restore = slim.get_variables_to_restore(include=["resnet_v1"])
-    restorer = tf.train.Saver(variables_to_restore)
-    saver = tf.train.Saver(max_to_keep=5)
+    saver = tf.train.Saver()
 
     sess = tf.Session()
 
@@ -97,14 +127,22 @@ def train():
     sess.run(tf.local_variables_initializer())
 
     # Restore variables from disk.
-    restorer.restore(sess, cfg.init_weights)
+    could_load,checkpoint_counter = load_checkpoint(sess,saver,cfg)
+    if could_load:
+        counter = checkpoint_counter
+        print ('load checkpoint Success')
+    else:
+        counter = 0
+        print ('load checkpoint failed')
+        print ('start to load resnet_v1')
+        restorer_backbone.restore(sess, cfg.init_weights)
 
     max_iter = int(cfg.max_iter)
 
     display_iters = cfg.display_iters
     cum_loss = 0.0
 
-    for it in range(sess.run(global_step),max_iter+1):
+    for it in range(counter,max_iter+1):
 
         [_, loss_val, summary] = sess.run([train_op, total_loss, merged_summaries])
         cum_loss += loss_val
@@ -118,9 +156,8 @@ def train():
 
         # Save snapshot
         if (it % cfg.save_iters == 0 and it != 0) or it == max_iter:
-            model_name = cfg.save_path + cfg.snapshot_prefix
-            saver.save(sess, model_name, global_step=it)
-            print ('saved model once')
+            save_checkpoint(it,sess,saver,cfg)
+            print ('saved model once with iteration[%d]'%it)
 
     sess.close()
     coord.request_stop()
@@ -128,6 +165,4 @@ def train():
 
 
 if __name__ == '__main__':
-    if not os.path.exists(cfg.save_path):
-        os.mkdir(cfg.save_path)
     train()

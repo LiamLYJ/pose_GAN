@@ -17,7 +17,7 @@ tf.app.flags.DEFINE_string(
     'the snapshot prefix'
 )
 tf.app.flags.DEFINE_string(
-    'save_path', './trained_model_redundent/',
+    'checkpoint_dir', './checkpoint_redundent/',
     'where to save the trained_model'
 )
 tf.app.flags.DEFINE_string(
@@ -85,6 +85,10 @@ tf.app.flags.DEFINE_string(
     'dataset name'
 )
 tf.app.flags.DEFINE_string(
+    'dataset_name', 'customer',
+    'the name of dataset'
+)
+tf.app.flags.DEFINE_string(
     'dataset_type', 'mpii',
     'dataset_type'
 )
@@ -121,7 +125,7 @@ tf.app.flags.DEFINE_integer(
     'how frequency need to display'
 )
 tf.app.flags.DEFINE_integer(
-    'save_iters', 1000,
+    'save_iters', 10000,
     'how frequency need to save model'
 )
 tf.app.flags.DEFINE_float(
