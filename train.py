@@ -113,7 +113,7 @@ def train():
     variables_to_restore_backbone = slim.get_variables_to_restore(include=["resnet_v1"])
     restorer_backbone = tf.train.Saver(variables_to_restore_backbone)
 
-    saver = tf.train.Saver()
+    saver = tf.train.Saver(max_to_keep = 0)
 
     sess = tf.Session()
 

@@ -13,15 +13,18 @@ tf.app.flags.DEFINE_bool(
     'shuffle the data or not'
 )
 tf.app.flags.DEFINE_string(
-    'snapshot_prefix', 'redundent',
+    # 'snapshot_prefix', 'redundent',
+    'snapshot_prefix', 'lsp',
     'the snapshot prefix'
 )
 tf.app.flags.DEFINE_string(
-    'checkpoint_dir', './checkpoint_redundent/',
+    # 'checkpoint_dir', './checkpoint_redundent/',
+    'checkpoint_dir', './checkpoint_lsp/',
     'where to save the trained_model'
 )
 tf.app.flags.DEFINE_string(
-    'log_dir', './log_redundent',
+    # 'log_dir', './log_redundent',
+    'log_dir', './log_lsp',
     'save log dir'
 )
 tf.app.flags.DEFINE_float(
@@ -49,11 +52,11 @@ tf.app.flags.DEFINE_string(
     'which optimizer'
 )
 tf.app.flags.DEFINE_bool(
-    'intermediate_supervision', False,
+    'intermediate_supervision', True,
     'if use intermediate_supervision in Resnet'
 )
 tf.app.flags.DEFINE_bool(
-    'redundent', True,
+    'redundent', False,
     'if use redundent structure '
 )
 tf.app.flags.DEFINE_integer(
@@ -81,11 +84,12 @@ tf.app.flags.DEFINE_integer(
     'crop_pad'
 )
 tf.app.flags.DEFINE_string(
-    'dataset', './dataset.mat',
+    # 'dataset', './cus_train.mat',
+    'dataset', './lsp_train.mat',
     'dataset name'
 )
 tf.app.flags.DEFINE_string(
-    'dataset_name', 'customer',
+    'dataset_name', 'lsp',
     'the name of dataset'
 )
 tf.app.flags.DEFINE_string(
@@ -113,7 +117,8 @@ tf.app.flags.DEFINE_string(
     'resnet_101 or resnet_50'
 )
 tf.app.flags.DEFINE_string(
-    'init_weights', '/home/hpc/ssd/lyj/pose-tensorflow/models/mpii/train/snapshot-1030000',
+    # 'init_weights', '/home/hpc/ssd/lyj/pose-tensorflow/models/mpii/train/snapshot-1030000',
+    'init_weights', '/home/hpc/ssd/lyj/pose-tensorflow/models/mpii/mpii-single-resnet-101',
     'init_weights'
 )
 tf.app.flags.DEFINE_integer(
@@ -125,7 +130,7 @@ tf.app.flags.DEFINE_integer(
     'how frequency need to display'
 )
 tf.app.flags.DEFINE_integer(
-    'save_iters', 10000,
+    'save_iters', 15000,
     'how frequency need to save model'
 )
 tf.app.flags.DEFINE_float(

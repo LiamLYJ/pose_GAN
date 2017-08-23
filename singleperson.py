@@ -18,13 +18,15 @@ cfg.all_joints_names = ['ankle', 'knee', 'hip', 'wrist', 'elbow', 'shoulder', 'c
 # cfg.init_weights = '/home/hpc/ssd/lyj/pose_GAN/checkpoint_PGAN/customer/pGAN.model-10000'
 # cfg.init_weights = '/home/hpc/ssd/lyj/pose-tensorflow/models/mpii/train/snapshot-1030000'
 cfg.init_weights = '/home/hpc/ssd/lyj/pose-tensorflow/models/mpii/mpii-single-resnet-101'
-cfg.global_scale = 1.0
+# cfg.init_weights = '/home/hpc/ssd/lyj/pose_GAN/checkpoint_redundent/customer/redundent-3690000'
 
+cfg.global_scale = 1.0
+cfg.redundent = False
 # Load and setup CNN part detector
 sess, inputs, outputs = predict.setup_pose_prediction(cfg)
 
 # Read image from file
-# file_name = "./testimgs/M2U00093_0125_0315_01_0001_silarea_52_217.jpg"
+# file_name = "/home/hpc/ssd/lyj/mpii_data/mpii_test_data/im00036_1.png"
 # image = imread(file_name, mode='RGB')
 #
 # image_batch = data_to_input(image)
@@ -48,10 +50,14 @@ sess, inputs, outputs = predict.setup_pose_prediction(cfg)
 # # Visualise the reuslts
 # visualize.show_heatmaps(cfg, image, scmap, pose)
 # visualize.waitforbuttonpress()
+# raise
+
+
 
 # Read test images
 # folder_name = '/home/hpc/ssd/lyj/liu_data/tmp/'
 folder_name = '/home/hpc/ssd/lyj/liu_data/testing_nobg/'
+# folder_name = '/home/hpc/ssd/lyj/mpii_data/mpii_test_data'
 start_time = time()
 prediction = []
 for root,dirs,files in os.walk(folder_name):
@@ -70,6 +76,9 @@ for root,dirs,files in os.walk(folder_name):
 prediction = np.array(prediction)
 pre = np.transpose(prediction,(1,2,0))
 # sio.savemat('predictions.mat', {'prediction':pre})
-sio.savemat('pretrain.mat',{'prediction':pre})
+# sio.savemat('pretrain.mat',{'prediction':pre})
+# sio.savemat('redundent.mat',{'prediction':pre})
+sio.savemat('custom_nopretrain.mat',{'prediction':pre})
+# sio.savemat('mpii_pre.mat',{'mpii_pre':pre})
 end_time = time()
 print (end_time - start_time)

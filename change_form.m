@@ -1,28 +1,28 @@
-tmp = load('/home/hpc/Downloads/lspet_dataset/joints.mat'); 
+tmp = load('/home/hpc/Downloads/lspet_dataset/joints.mat');
 data = tmp.joints;
-dataset = []; 
+dataset = [];
 dataset.image = [];
 dataset.size = [];
 dataset.joints = [];
 count = 0;
-dict = [5,4,3,2,1,0,11,10,9,8,7,6,12,13];
+dict = [0,1,2,3,4,5,6,7,8,9,10,11,12,13];
 file_prefix = '/home/hpc/Downloads/lspet_dataset/images/';
 
 for i= 1:length(data)
     dataset(i).image = [file_prefix,'im',num2str(i,'%05d'),'.jpg'] ;
-    img_size = size(imread(dataset(i).image));    
-    dataset(i).size = [3,img_size(1:2)]; 
+    img_size = size(imread(dataset(i).image));
+    dataset(i).size = [3,img_size(1:2)];
     tmp = [];
     data_tmp = data(:,:,i);
     for j= 1:14
-        if  data_tmp(j,3) == 0 
-            continue; 
+        if  data_tmp(j,3) == 0
+            continue;
         end
         tmp = cat(1,tmp,[dict(j),data_tmp(j,1:2)]);
     end
     dataset(i).joints{1} = tmp;
 end
-save('lsp.mat','dataset')
+save('lsp_train.mat','dataset')
 
 % tmp = load('/home/hpc/ssd/lyj/liu_data/action_training_nobg.mat');
 % data = tmp.posAction;
@@ -33,7 +33,7 @@ save('lsp.mat','dataset')
 % count = 0;
 % dict = [13,12,8,7,6,2,1,0,9,10,11,3,4,5];
 % file_prefix = '/home/hpc/ssd/lyj/liu_data/';
-% 
+%
 % for num_list = 1:length(data)
 %     for num_file = 1:length(data{1,num_list})
 %         count = count + 1;

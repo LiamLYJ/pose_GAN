@@ -7,11 +7,16 @@ function [meanPDJ, partPDJ] = evaluatePDJ(GT, PRD, givenThreshold)
     n = 1;
 %define torsor as the disant between left hand and right shoulder + right hand and left shoulder /2  
     for i =1:length(GT)
-        gt = GT(:,:,i);
+        gt = GT(:,1:2,i);
 %         gt = gt';
         dist = 0.5 * (sqrt(sum((gt(7,:)-gt(10,:)).^2)) + sqrt( sum ((gt(9,:)-gt(12,:)).^2))); 
         
         prd = PRD(:,:,i);
+        for check_num = 1:14
+            if GT(check_num,3,i) == 0
+                prd(check_num,:) = gt(check_num,:);
+            end
+        end        
 %         prd = prd';
         result = sqrt(sum((prd-gt).^2,2));
         tp(:,n) = result <= threshold * dist;

@@ -7,7 +7,7 @@ function [meanPCP, partPCP] = evaluatePCP(GT, PRD, givenThreshold)
     n = 1;
 
     for i =1:length(GT)
-        gt = GT(:,:,i);
+        gt = GT(:,1:2,i);
 %         gt = gt';
         dist1 = sqrt(sum((gt(14,:)-gt(13,:)).^2));
         dist2 = sqrt(sum((gt(13,:)-gt(9,:)).^2));
@@ -23,10 +23,13 @@ function [meanPCP, partPCP] = evaluatePCP(GT, PRD, givenThreshold)
         dist12 = sqrt(sum((gt(4,:)-gt(5,:)).^2));
         dist13 = sqrt(sum((gt(5,:)-gt(6,:)).^2));
         
-        
-        
-        
+         
         prd = PRD(:,:,i);
+        for check_num = 1:14
+            if GT(check_num,3,i) == 0
+                prd(check_num,:) = gt(check_num,:);
+            end
+        end
 %         prd = prd';
         result1 = sqrt(sum((gt(1,:) - prd(1,:)).^2));
         result2 = sqrt(sum((gt(2,:) - prd(2,:)).^2));
