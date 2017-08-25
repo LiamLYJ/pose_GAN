@@ -8,6 +8,14 @@ count = 0;
 dict = [0,1,2,3,4,5,6,7,8,9,10,11,12,13];
 file_prefix = '/home/hpc/Downloads/lspet_dataset/images/';
 
+tmp_ex = load('/home/hpc/Downloads/lsp_dataset/joints.mat');
+data_ex = tmp_ex.joints;
+data_ex = permute(data_ex,[2,1,3]);
+folder_ex_train = '/home/hpc/Downloads/lsp_dataset/train/';
+folder_ex_test = '/home/hpc/Downloads/lsp_dataset/test/';
+files_train = dir(folder_ex_train);
+files_test = dir(folder_ex_test);
+
 for i= 1:length(data)
     dataset(i).image = [file_prefix,'im',num2str(i,'%05d'),'.jpg'] ;
     img_size = size(imread(dataset(i).image));
@@ -22,7 +30,33 @@ for i= 1:length(data)
     end
     dataset(i).joints{1} = tmp;
 end
-save('lsp_train.mat','dataset')
+% add extra 1000 training data
+for i = 3:1002
+    filename = [folder_ex_train,files_train(i).name];
+    img_size = size(imread(filename));
+    dataset(9998+i).size = [3,img_size(1:2)];
+    dataset(9998+i).image = filename;
+    which_num = str2num(files_train(i).name(3:6));
+    tmp = [];
+    data_tmp = data_ex(:,:,which_num);
+    for j = 1:14
+%         if data_tmp(j,3) == 0
+%             continue
+%         end
+        tmp = cat(1,tmp,[dict(j),data_tmp(j,1:2)*2]);
+    end
+    dataset(9998+i).joints{1} = tmp;
+end
+% get 1000 testing data
+lsp_test = load('lsp_test.mat');
+gt = lsp_test.lsp_gt;
+lsp_gt = zeros(14,3,1000);
+for i = 3:1002
+    which_num = str2num(files_test(i).name(3:6));
+    lsp_gt(:,:,i-2) = gt(:,:,which_num);
+end
+save('lsp_test_1000.mat','lsp_gt');
+save('lsp_train.mat','dataset');
 
 % tmp = load('/home/hpc/ssd/lyj/liu_data/action_training_nobg.mat');
 % data = tmp.posAction;
